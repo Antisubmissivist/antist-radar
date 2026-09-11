@@ -1,0 +1,41 @@
+name: Hourly radar sweep
+on:
+  schedule:
+    - cron: '17 * * * *'
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: radar-sweep
+  cancel-in-progress: false
+jobs:
+  sweep:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    env:
+      LLM_PROVIDER: minimax
+      LLM_MODEL: ${{ secrets.LLM_MODEL }}
+      LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+      FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
+      FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
+      EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
+      ACLED_EMAIL: ${{ secrets.ACLED_EMAIL }}
+      ACLED_PASSWORD: ${{ secrets.ACLED_PASSWORD }}
+      RADAR_INGEST_TOKEN: ${{ secrets.RADAR_INGEST_TOKEN }}
+      GH_READ_TOKEN: ${{ github.token }}
+      SOURCE_TIMEOUT_MS: '45000'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - uses: actions/cache@v4
+        with:
+          path: engine/runs/decision-state.json
+          key: radar-state-${{ github.run_id }}
+          restore-keys: radar-state-
+      - run: npm test
+      - run: node scripts/radar.mjs --push
+        working-directory: engine

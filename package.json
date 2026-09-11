@@ -1,0 +1,18 @@
+{
+  "name": "antist-radar",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "engine",
+    "site"
+  ],
+  "scripts": {
+    "build": "npm run build -w site",
+    "check": "npm run check -w site",
+    "test": "node --test engine/test/radar-*.test.mjs",
+    "sweep": "npm run radar -w engine"
+  },
+  "devDependencies": {
+    "playwright": "^1.63.0"
+  }
+}

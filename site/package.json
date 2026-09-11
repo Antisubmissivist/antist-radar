@@ -1,0 +1,6 @@
+{
+  "name": "antist-radar-site", "private": true, "type": "module",
+  "scripts": {"build": "tailwindcss -i src/style.css -o public/style.css --minify", "check": "tsc --noEmit", "dev": "wrangler dev", "deploy": "npm run build && wrangler deploy"},
+  "dependencies": {"hono": "latest"},
+  "devDependencies": {"@tailwindcss/cli": "latest", "tailwindcss": "latest", "typescript": "latest", "wrangler": "latest", "@cloudflare/workers-types": "latest"}
+}

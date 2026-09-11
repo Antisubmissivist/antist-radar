@@ -1,0 +1,11 @@
+node_modules/
+.env
+.env.*
+!.env.example
+.dev.vars*
+runs/
+output/
+.wrangler/
+dist/
+*.log
+*.bak

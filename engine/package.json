@@ -1,0 +1,47 @@
+{
+  "name": "antist-monitor",
+  "version": "2.0.0",
+  "description": "个人世界监控引擎（Crucix fork）：28 源采集 + 中文简报推 Telegram + 公开层发 antist.ai",
+  "type": "module",
+  "scripts": {
+    "radar": "node scripts/radar.mjs",
+    "start": "node server.mjs",
+    "dev": "node --trace-warnings server.mjs",
+    "sweep": "node apis/briefing.mjs",
+    "inject": "node dashboard/inject.mjs",
+    "brief": "node apis/briefing.mjs",
+    "brief:save": "node apis/save-briefing.mjs",
+    "diag": "node diag.mjs",
+    "clean": "node scripts/clean.mjs",
+    "fresh-start": "npm run clean && npm start",
+    "probe": "node scripts/probe.mjs",
+    "digest": "node scripts/daily-digest.mjs",
+    "digest:send": "node scripts/daily-digest.mjs --send",
+    "publish": "node scripts/publish-public.mjs",
+    "publish:push": "node scripts/publish-public.mjs --push",
+    "daily": "node scripts/radar.mjs"
+  },
+  "keywords": [
+    "osint",
+    "intelligence",
+    "dashboard",
+    "geopolitical"
+  ],
+  "author": "Crucix",
+  "license": "AGPL-3.0-only",
+  "engines": {
+    "node": ">=22",
+    "npm": ">=10"
+  },
+  "dependencies": {
+    "cheerio": "^1.2.0",
+    "express": "^5.1.0",
+    "fast-xml-parser": "^5.11.1"
+  },
+  "optionalDependencies": {
+    "discord.js": "^14.25.1"
+  },
+  "overrides": {
+    "undici": "^7.24.4"
+  }
+}

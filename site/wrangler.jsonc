@@ -1,0 +1,14 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "antist-radar", "main": "src/index.tsx",
+  "account_id": "c0f6957d84331bab36daca9b1294ff7e",
+  "compatibility_date": "2026-09-11", "compatibility_flags": ["nodejs_compat"],
+  "workers_dev": false, "preview_urls": false,
+  "routes": [{"pattern":"radar.antist.ai","custom_domain":true}],
+  "assets": {"directory":"./public", "binding":"ASSETS"},
+  "kv_namespaces": [{"binding":"MONITOR","id":"6c38912353a7478fa51e76dd7e22e524"}],
+  "r2_buckets": [{"binding":"ARCHIVE","bucket_name":"antist-radar-archive"}],
+  "d1_databases": [{"binding":"DB","database_name":"antist-radar-ledger","database_id":"58e8b227-b9b4-48b6-8670-900f2a44fdab","migrations_dir":"migrations"}],
+  "observability": {"enabled":true},
+  "triggers": {"crons":["41 * * * *"]}
+}

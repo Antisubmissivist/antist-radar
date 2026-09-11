@@ -1,0 +1,15 @@
+@import "tailwindcss";
+@source "./**/*.{ts,tsx}";
+@custom-variant dark (&:where(.dark, .dark *));
+@theme { --font-sans: "Inter", "Noto Sans JP", "Noto Sans SC", system-ui, sans-serif; }
+:root{color-scheme:light;--bg:#fafaf8;--fg:#18181b;--muted:#71717a;--line:#deded8;--panel:#fff}
+.dark{color-scheme:dark;--bg:#101113;--fg:#eeeeea;--muted:#a1a1aa;--line:#303236;--panel:#181a1d}
+body{background:var(--bg);color:var(--fg);font-family:var(--font-sans);margin:0}
+button,a,input{touch-action:manipulation}a{color:inherit}button{cursor:pointer}
+::selection{background:#cbf36b;color:#111}*:focus-visible{outline:2px solid #84cc16;outline-offset:4px}
+.rule{border-color:var(--line)}.muted{color:var(--muted)}.panel{background:var(--panel)}
+.signal{width:8px;height:8px;background:#67a92e;display:inline-block}.signal.bad{background:#dd8c27}
+.number{font-variant-numeric:tabular-nums;font-family:ui-monospace,monospace}
+.event-card{border-top:1px solid var(--line);transition:background .15s}.event-card:hover{background:var(--panel)}
+details summary{cursor:pointer}details[open] summary{margin-bottom:12px}
+@media(prefers-reduced-motion:reduce){*{scroll-behavior:auto!important;transition:none!important}}

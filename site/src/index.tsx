@@ -4,7 +4,7 @@ import {publicSnapshot,resolveForecast} from '../../engine/lib/radar-contract.mj
 import {ORIGIN,languages,titles,descriptions,type Locale} from './seo';
 import {sendDigest} from './delivery';
 import {getMarkets,setWatchlist,searchSymbols} from './markets';
-type Bindings=Env & {RADAR_INGEST_TOKEN:string;TELEGRAM_BOT_TOKEN?:string;TELEGRAM_CHAT_ID?:string};
+type Bindings=Env & {RADAR_INGEST_TOKEN:string;TELEGRAM_BOT_TOKEN?:string;TELEGRAM_CHAT_ID?:string;GH_DISPATCH_TOKEN?:string};
 type Snapshot=ReturnType<typeof publicSnapshot>;
 const app=new Hono<{Bindings:Bindings}>();
 const KEY='radar:public';
@@ -31,6 +31,10 @@ async function settle(env:Bindings,s:Snapshot){
   for(const r of rows){const result=resolveForecast({symbol:r.symbol,baseline:r.baseline,direction:r.direction,dueAt:r.due_at},s.markets);
     if(result)await env.DB.prepare("UPDATE forecasts SET status=?,observed=?,observation_at=?,resolved_at=? WHERE id=? AND status='open'").bind(result.status,result.observed,result.observationAt,result.resolvedAt,r.id).run();}
 }
+// GitHub's scheduled workflows are unreliable on new repos, so the Worker's own
+// cron (reliable) dispatches the sweep when the snapshot goes stale.
+async function dispatchSweep(env:Bindings){if(!env.GH_DISPATCH_TOKEN)return {ok:false,reason:'GH_DISPATCH_TOKEN unset'};try{const r=await fetch('https://api.github.com/repos/Antisubmissivist/antist-radar/actions/workflows/sweep.yml/dispatches',{method:'POST',headers:{Authorization:`Bearer ${env.GH_DISPATCH_TOKEN}`,Accept:'application/vnd.github+json','User-Agent':'antist-radar','Content-Type':'application/json'},body:JSON.stringify({ref:'main'})});return {ok:r.ok,status:r.status};}catch(e){return {ok:false,reason:String(e)};}}
+function briefingText(s:Snapshot,l:Locale){const ev=s.events.slice(0,8);const lines=[`Antist Radar · ${formatDate(s.generatedAt,l)}`,'',s.digest[l],''];for(const e of ev){lines.push(`• ${e.title[l]}`,`  ${e.action[l]}`,`  ${e.url}`);}for(const f of (s.forecasts||[])){lines.push('',`Forecast: ${f.symbol} ${f.direction} ${Math.round(Number(f.probability)*100)}% (due ${f.dueAt.slice(0,10)})`);}return lines.join('\n');}
 app.use('*',async(c,next)=>{await next();c.header('X-Content-Type-Options','nosniff');c.header('Referrer-Policy','strict-origin-when-cross-origin');c.header('X-Frame-Options','DENY');});
 app.get('/',c=>c.redirect('/en',302));
 app.get('/robots.txt',c=>c.text(`User-agent: *\nAllow: /\nDisallow: /api/ingest\nSitemap: ${ORIGIN}/sitemap.xml`));
@@ -39,6 +43,9 @@ app.get('/api/public',async c=>{const s=await c.env.MONITOR.get(KEY);c.header('C
 app.get('/api/ledger',async c=>c.json({forecasts:await ledger(c.env.DB)}));
 app.get('/api/markets',async c=>{const q=c.req.query('symbols');const symbols=q?q.split(',').map(x=>x.trim()).filter(Boolean):undefined;const m=await getMarkets(c.env,symbols);c.header('Cache-Control','no-store');return c.json(m);});
 app.get('/api/symbols',async c=>{const q=(c.req.query('q')||'').trim();if(!q)return c.json({results:[]});c.header('Cache-Control','public, max-age=300');return c.json({results:await searchSymbols(q.slice(0,40))});});
+app.get('/api/briefing',async c=>{const raw=c.req.query('lang')||'zh';const L=(languages as readonly string[]).includes(raw)?raw as Locale:'zh';const s=await c.env.MONITOR.get<Snapshot>(KEY,'json');if(!s)return c.json({status:'pending'},503);const events=s.events.slice(0,8).map(e=>({category:e.category,title:e.title[L],action:e.action[L],url:e.url}));const forecasts=(s.forecasts||[]).map(f=>({symbol:f.symbol,direction:f.direction,probability:f.probability,dueAt:f.dueAt,claim:f.claim[L]}));c.header('Cache-Control','no-store');if(c.req.query('format')==='text')return c.text(briefingText(s,L));return c.json({lang:L,updatedAt:s.generatedAt,digest:s.digest[L],events,forecasts,text:briefingText(s,L)});});
+app.post('/api/dispatch',async c=>{const expected=`Bearer ${c.env.RADAR_INGEST_TOKEN||''}`;if(!c.env.RADAR_INGEST_TOKEN||c.req.header('Authorization')!==expected)return c.json({ok:false},401);return c.json(await dispatchSweep(c.env));});
+app.get('/llms.txt',c=>c.text(['# Antist Radar API','','Independent Japan+world intelligence radar. Public, read-only JSON.','','GET /api/public            Full snapshot (schema 2): digest(ja/en/zh), events, markets, sources, forecasts','GET /api/briefing?lang=zh  Concise briefing for agents/Telegram; add &format=text for plain text','GET /api/ledger            Published forecasts and their settled results','GET /api/markets?symbols=  Live quotes for any comma-separated Yahoo symbols','GET /api/symbols?q=        Symbol search (returns symbol, name, exchange)','','Write endpoints require Authorization: Bearer <token>:','POST /api/ingest  POST /api/digest  POST /api/watchlist  POST /api/dispatch','','Forecasts are experimental and not investment advice.'].join('\n'),200,{'Content-Type':'text/plain; charset=utf-8'}));
 app.post('/api/watchlist',async c=>{const expected=`Bearer ${c.env.RADAR_INGEST_TOKEN||''}`;if(!c.env.RADAR_INGEST_TOKEN||c.req.header('Authorization')!==expected)return c.json({ok:false},401);const body=await c.req.json().catch(()=>null) as {symbols?:unknown}|null;if(!Array.isArray(body?.symbols))return c.json({ok:false,reason:'symbols[] required'},400);const list=(body!.symbols as unknown[]).filter((s):s is {symbol:string;name?:string}=>!!s&&typeof (s as {symbol?:unknown}).symbol==='string').slice(0,30).map(s=>({symbol:String(s.symbol).slice(0,24),name:String(s.name||s.symbol).slice(0,40)}));await setWatchlist(c.env,list);return c.json({ok:true,count:list.length});});
 app.post('/api/digest',async c=>{const expected=c.env.RADAR_INGEST_TOKEN;if(!expected||c.req.header('Authorization')!==`Bearer ${expected}`)return c.json({ok:false},401);const s=await c.env.MONITOR.get<Snapshot>(KEY,'json');if(!s)return c.json({status:'pending'},503);return c.json(await sendDigest(c.env,s));});
 app.post('/api/ingest',async c=>{
@@ -63,7 +70,7 @@ app.post('/api/ingest',async c=>{
 app.get('/:locale',async c=>{
   const l=c.req.param('locale') as Locale;if(!languages.includes(l))return c.notFound();
   const w=words[l];const [s,cachedLedger]=await Promise.all([c.env.MONITOR.get<Snapshot>(KEY,'json'),c.env.MONITOR.get<Record<string,unknown>[]>('radar:ledger','json')]);const rows=cachedLedger||[];
-  const stale=!s||Date.now()-Date.parse(s.generatedAt)>90*60000;
+  const stale=!s||Date.now()-Date.parse(s.generatedAt)>150*60000;
   const healthy=s?.sources.filter(x=>['ok','quiet'].includes(x.status)).length||0;
   const strip=(s?.markets.filter(q=>STRIP.includes(q.symbol))||[]);
   c.header('Cache-Control','no-store');c.header('Content-Language',l);
@@ -80,4 +87,4 @@ app.get('/:locale',async c=>{
   <footer class="border-t py-10 grid md:grid-cols-2 gap-8"><div><p class="text-sm font-semibold tracking-tight">ANTIST / RADAR.</p><p class="text-xs text-muted-foreground mt-3">Japan & the world. Independently observed.</p><a class="text-xs text-muted-foreground underline mt-2 inline-block" href="https://github.com/Antisubmissivist/antist-radar">Source code · AGPL-3.0</a></div><div><h2 class="text-xs font-semibold mb-2">{w.method}</h2><p class="text-xs text-muted-foreground leading-relaxed">{w.methodText}</p></div></footer></main></body></html>);
 });
 app.onError((_err,c)=>c.json({error:'Temporarily unavailable'},503));
-export default {fetch:app.fetch,async scheduled(event:ScheduledController,env:Bindings){const s=await env.MONITOR.get<Snapshot>(KEY,'json');if(s){await settle(env,s);await env.MONITOR.put('radar:ledger',JSON.stringify(await ledger(env.DB)));if(new Date(event.scheduledTime+9*3600000).getUTCHours()>=8){const result=await sendDigest(env,s,event.scheduledTime);console.log(JSON.stringify({event:'daily-delivery',...result}));}}}};
+export default {fetch:app.fetch,async scheduled(event:ScheduledController,env:Bindings){const s=await env.MONITOR.get<Snapshot>(KEY,'json');if(!s||Date.now()-Date.parse(s.generatedAt)>50*60000){console.log(JSON.stringify({event:'sweep-dispatch',...(await dispatchSweep(env))}));}if(s){await settle(env,s);await env.MONITOR.put('radar:ledger',JSON.stringify(await ledger(env.DB)));if(new Date(event.scheduledTime+9*3600000).getUTCHours()>=8){const result=await sendDigest(env,s,event.scheduledTime);console.log(JSON.stringify({event:'daily-delivery',...result}));}}}};

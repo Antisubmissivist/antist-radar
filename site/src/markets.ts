@@ -21,6 +21,11 @@ export const DEFAULT_WATCHLIST: WatchItem[] = [
 const CACHE_MS = 10000;
 const SYMBOL_RE = /^[A-Za-z0-9.^=_-]{1,24}$/;
 
+// Investing.com-style indices use a leading dot (".VIX"); Yahoo uses a caret.
+export function normalizeSymbol(s: string): string {
+  return String(s || '').trim().replace(/^\./, '^').toUpperCase();
+}
+
 export async function getWatchlist(env: MarketsEnv): Promise<WatchItem[]> {
   const raw = await env.MONITOR.get('radar:watchlist');
   if (raw) {
@@ -58,7 +63,7 @@ async function quote(item: WatchItem): Promise<MarketQuote | null> {
 
 export async function getMarkets(env: MarketsEnv, override?: string[]): Promise<{ updatedAt: string; items: MarketQuote[] }> {
   const list: WatchItem[] = (override && override.length)
-    ? override.filter(s => SYMBOL_RE.test(s)).slice(0, 30).map(s => ({ symbol: s, name: '' }))
+    ? override.map(normalizeSymbol).filter(s => SYMBOL_RE.test(s)).slice(0, 30).map(s => ({ symbol: s, name: '' }))
     : await getWatchlist(env);
   if (!list.length) return { updatedAt: new Date().toISOString(), items: [] };
 
@@ -80,7 +85,8 @@ export type SymbolHit = { symbol: string; name: string; type: string; exchange: 
 
 export async function searchSymbols(q: string): Promise<SymbolHit[]> {
   try {
-    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0&enableFuzzyQuery=false`;
+    const query = q.trim().replace(/^\./, '^');
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(query)}&quotesCount=10&newsCount=0&enableFuzzyQuery=false`;
     const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AntistRadar/1.0)' }, signal: AbortSignal.timeout(6000) });
     if (!r.ok) return [];
     const d = await r.json() as { quotes?: Record<string, unknown>[] };

@@ -33,7 +33,7 @@ function render(map,updatedAt){const el=$('[data-markets]');if(!el)return;const 
 
 async function refresh(){const syms=layout.map(x=>x.symbol);if(!syms.length){render(new Map(),null);return;}try{const r=await fetch('/api/markets?symbols='+encodeURIComponent(syms.join(',')),{cache:'no-store'});if(!r.ok)return;const d=await r.json();render(new Map((d.items||[]).map(q=>[q.symbol,q])),d.updatedAt);}catch{}}
 
-function addSymbol(sym){sym=String(sym||'').trim().toUpperCase();if(!sym)return;if(!layout.some(x=>x.symbol===sym)){layout.push({symbol:sym,hidden:false});saveLayout();}refresh();}
+function addSymbol(sym){sym=String(sym||'').trim().replace(/^\./,'^').toUpperCase();if(!sym)return;if(!layout.some(x=>x.symbol===sym)){layout.push({symbol:sym,hidden:false});saveLayout();}refresh();}
 
 function wireTiles(){$$('[data-markets] [data-symbol]').forEach(el=>{
   el.addEventListener('click',e=>{const h=e.target.closest('[data-hide]');const d=e.target.closest('[data-del]');

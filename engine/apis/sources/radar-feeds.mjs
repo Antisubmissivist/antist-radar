@@ -3,7 +3,12 @@ import * as cheerio from 'cheerio';
 import { eventId } from '../../lib/decision-events.mjs';
 const parser=new XMLParser({ignoreAttributes:false,removeNSPrefix:true,processEntities:true});
 const array=v=>v==null?[]:Array.isArray(v)?v:[v];
-export const plain=v=>cheerio.load(String(v??'')).text().replace(/\s+/g,' ').trim();
+// Atom/HTML content can arrive as an object ({'#text':…} or {div:{p:[…]}}); flatten
+// it to text instead of String(obj) === "[object Object]".
+const textOf=v=>{if(v==null)return '';if(typeof v==='string')return v;if(Array.isArray(v))return v.map(textOf).filter(Boolean).join(' ');if(typeof v==='object'){for(const k of ['#text','div','p','body','_']){if(v[k]!=null){const t=textOf(v[k]);if(t)return t;}}return Object.values(v).map(textOf).filter(Boolean).join(' ');}return String(v);};
+export const plain=v=>{const s=textOf(v).trim();if(!s||s==='[object Object]')return '';try{return cheerio.load(s).text().replace(/\s+/g,' ').trim();}catch{return s.replace(/\s+/g,' ').trim();}};
+// An item is usable only if it carries real detail beyond its headline.
+export const usableEvidence=(evidence,title)=>{const t=String(evidence||'').replace(/\s+/g,' ').trim();if(!t||/\[object object\]/i.test(t))return false;if(t===String(title||'').replace(/\s+/g,' ').trim())return false;return t.length>=40;};
 const iso=v=>Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
 export async function request(url, type='text', headers={}) {
   const r=await fetch(url,{headers:{'User-Agent':'AntistRadar/1.0 (+https://radar.antist.ai)',...headers},signal:AbortSignal.timeout(18000)});
@@ -18,8 +23,8 @@ export function parseFeed(raw) {
   if(!root) throw new Error('Feed schema changed');
   return array(root.item||root.entry).map(i=>({
     title:plain(i.title?.['#text']||i.title),url:typeof i.link==='string'?i.link:array(i.link).find(x=>!x['@_rel']||x['@_rel']==='alternate')?.['@_href'],
-    publishedAt:iso(i.date||i.pubDate||i.published||i.updated||i.issued),evidence:plain(i.description||i.summary||i.content||'').slice(0,1600),
-  })).filter(i=>i.title&&i.url);
+    publishedAt:iso(i.date||i.pubDate||i.published||i.updated||i.issued),evidence:(()=>{for(const c of [i.content,i.summary,i.description]){const t=plain(c);if(t)return t.slice(0,1600);}return '';})(),
+  })).filter(i=>i.title&&i.url&&usableEvidence(i.evidence,i.title));
 }
 function event(source,category,item) {
   return {id:eventId(source,item.sourceId||item.url),source,category,title:item.title.slice(0,280),url:item.url,

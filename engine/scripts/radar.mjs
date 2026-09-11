@@ -2,7 +2,7 @@ import '../apis/utils/env.mjs';
 import {mkdir,readFile,writeFile,rename} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {fullBriefing} from '../apis/briefing.mjs';
-import {collectFeeds} from '../apis/sources/radar-feeds.mjs';
+import {collectFeeds,usableEvidence} from '../apis/sources/radar-feeds.mjs';
 import {changes,eventId,eligibility} from '../lib/decision-events.mjs';
 import {analyseRadar} from '../lib/radar-analysis.mjs';
 import {publicSnapshot} from '../lib/radar-contract.mjs';
@@ -24,7 +24,11 @@ function add(source,category,title,url,evidence,at=null,stableId=url) {if(!title
 for(const a of (s.AIInfra?.hardSignals||[]).slice(0,8))add(a.from,'ai',a.title,a.url,a.title,a.at);
 for(const a of (s.GDELT?.allArticles||[]).slice(0,5))add('GDELT','geopolitics',a.title,a.url,a.title);
 for(const a of (s['CISA-KEV']?.vulnerabilities||[]).slice(0,5))add('CISA-KEV','japan-life',`${a.cveID}: ${a.vulnerabilityName}`,`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,`${a.vendorProject} ${a.product}. ${a.shortDescription||''}. ${a.requiredAction||''}. Federal remediation due date is not a deadline applying to every reader.`,null,a.cveID);
-const unique=[...new Map(raw.map(x=>[x.id,x])).values()];
+const all=[...new Map(raw.map(x=>[x.id,x])).values()];
+// Drop items with no usable content (unreadable/missing extraction): only real news stays.
+const unique=all.filter(x=>usableEvidence(x.evidence,x.title));
+const droppedEvidence=all.length-unique.length;
+if(droppedEvidence)console.log(JSON.stringify({event:'dropped-unusable',count:droppedEvidence,of:all.length}));
 const previous=await load('runs/decision-state.json',{});const delta=changes(unique,previous);
 // 10-day window: keep the candidate pool bounded so scoring stays fast.
 const cutoff=Date.now()-10*86400000;

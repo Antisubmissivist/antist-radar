@@ -4,6 +4,7 @@ import {LANGS,multilingual} from './radar-contract.mjs';
 import {writeFile} from 'node:fs/promises';
 import {validateEditorial} from './radar-editorial.mjs';
 import {selectionSystemPrompt,PERSONA_EN} from './persona.mjs';
+import {judgeEdition} from './radar-judge.mjs';
 
 // Pre-selection pass: ask the model which candidates matter for the reader
 // persona. Only supplied IDs are accepted; a round-robin fallback keeps the
@@ -56,37 +57,9 @@ Forecasts are explicitly experimental directional hypotheses, not advice. Provid
       const start=fence.indexOf('{'),end=fence.lastIndexOf('}');
       const raw=start>=0&&end>start?fence.slice(start,end+1):fence;
       let data;try{data=JSON.parse(raw);}catch{throw new Error(`Analysis JSON invalid (${raw.length} characters); publication stopped`);}
-      const editionData=data;
-      data={digest:Object.fromEntries(LANGS.map(l=>[l,editionData[l]?.digest])),items:(editionData.en?.items||[]).map(row=>({id:row.id,...Object.fromEntries(['title','summary','audience','action','unknowns'].map(k=>[k,Object.fromEntries(LANGS.map(l=>[l,editionData[l]?.items?.find(i=>i.id===row.id)?.[k]]))]))})),forecasts:editionData.forecasts||[]};
-      const lookup=new Map(events.map(e=>[e.id,e]));const selected=[];
-      for(const row of data.items||[]) {
-        const original=lookup.get(row.id);if(!original||selected.some(e=>e.id===row.id))throw new Error('Invalid evidence ID');
-        for(const k of ['title','summary','audience','action','unknowns']) multilingual(row[k]);
-        for(const k of ['title','summary','audience','action','unknowns']) validateEditorial(row[k],{title:k==='title'});
-        for(const k of ['title','summary','audience','action','unknowns']) if(/[\uac00-\ud7af]|本周|事业|半导体|主办/.test(row[k].ja)) throw new Error('Japanese language contamination; publication stopped');
-        // Preserve all dates, identity and evidence from the collector, never the model.
-        selected.push({...original,title:row.title,summary:row.summary,audience:row.audience,action:row.action,unknowns:row.unknowns});
-      }
-      if(!selected.length)throw new Error('Empty analysis');
-      multilingual(data.digest);
-      validateEditorial(data.digest);
-      if(/[\uac00-\ud7af]|本周|事业|半导体|主办/.test(data.digest.ja))throw new Error('Japanese digest contamination; publication stopped');
-      const forecasts=[];
-      for(const f of (data.forecasts||[])){
-        const q=markets.find(q=>q.symbol===f?.symbol && Date.now()-Date.parse(q.at)<3600000);
-        if(!q||!['above','below'].includes(f.direction)||!(f.probability>0&&f.probability<1))continue;
-        if(forecasts.some(x=>x.symbol===q.symbol))continue;
-        // A bad rationale drops that board's forecast, never the whole publication.
-        try{
-          multilingual(f.rationale);validateEditorial(f.rationale);
-          if(/[\uac00-\ud7af]|本周|事业|半导体|主办/.test(f.rationale.ja))throw new Error('contamination');
-        }catch{continue;}
-        const horizon=Math.min(30,Math.max(1,Math.round(Number(f.horizonDays)||1)));
-        const createdAt=new Date().toISOString();const dueAt=new Date(Date.now()+horizon*86400000).toISOString();const above=f.direction==='above';
-        forecasts.push({id:`${createdAt.slice(0,10)}:${q.symbol}`,createdAt,dueAt,symbol:q.symbol,baseline:q.price,direction:f.direction,probability:f.probability,
-          claim:{ja:`期限後の最初の新しい観測で ${q.symbol} が基準値 ${q.price} を${above?'上回る':'下回る'}。`,en:`At the first fresh observation after the deadline, ${q.symbol} will be ${above?'above':'below'} the baseline ${q.price}.`,zh:`到期后首次新报价中，${q.symbol} 将${above?'高于':'低于'}基准值 ${q.price}。`},rationale:f.rationale,evidence:[q.source]});
-      }
-      return {digest:data.digest,events:selected,forecasts,usage:r.usage};
+      const judged=judgeEdition(data,events,markets);
+      if(!judged.ok)throw new Error('Judge rejected: '+judged.errors.slice(0,3).join(' | '));
+      return {...judged.result,usage:r.usage};
     }catch(e){
       lastError=e;console.error(`[radar] analysis attempt ${attempt}/3 rejected: ${e.message}`);
     }

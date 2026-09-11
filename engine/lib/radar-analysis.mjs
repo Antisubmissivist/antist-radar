@@ -12,13 +12,16 @@ import {judgeEdition} from './radar-judge.mjs';
 async function selectByPersona(provider,pool){
   if(!pool.length)return [];
   try{
-    const r=await provider.complete(selectionSystemPrompt(),JSON.stringify(pool.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,220)}))),{maxTokens:4000,timeout:120000});
+    const r=await provider.complete(selectionSystemPrompt(),JSON.stringify(pool.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,220)}))),{maxTokens:6000,timeout:120000});
     const f=String(r.text||'').replace(/^```(?:json)?\s*|\s*```$/g,'').trim();const a=f.indexOf('{'),b=f.lastIndexOf('}');
     const j=JSON.parse(a>=0&&b>a?f.slice(a,b+1):f);
     const byId=new Map(pool.map(e=>[e.id,e]));const out=[];
-    for(const row of (Array.isArray(j&&j.select)?j.select:[])){const id=String((row&&row.id)||'');const e=byId.get(id);if(e&&!out.includes(e))out.push(e);}
-    console.error(`[radar] persona selected ${out.length}/${pool.length}`);
-    return out.slice(0,12);
+    for(const row of (Array.isArray(j&&j.select)?j.select:[])){const id=String((row&&row.id)||'');const e=byId.get(id);if(e&&!out.includes(e)){e.score=Math.max(0,Math.min(100,Math.round(Number(row&&row.score)||0)));out.push(e);}}
+    out.sort((x,y)=>(y.score||0)-(x.score||0));
+    const per=new Map();const capped=[];
+    for(const e of out){const n=per.get(e.category)||0;if(n>=3)continue;per.set(e.category,n+1);capped.push(e);}
+    console.error(`[radar] persona selected ${capped.length}/${pool.length}`);
+    return capped;
   }catch(e){console.error('[radar] persona selection failed:',e.message);return [];}
 }
 function roundRobin(sorted,limit){const byCat=new Map();for(const e of sorted){const a=byCat.get(e.category)||[];if(a.length<3)a.push(e);byCat.set(e.category,a);}const lists=[...byCat.values()].filter(l=>l.length);const out=[];while(out.length<limit&&lists.some(l=>l.length)){for(const l of lists){if(out.length>=limit)break;if(l.length)out.push(l.shift());}}return out;}

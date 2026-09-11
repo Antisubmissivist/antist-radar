@@ -67,17 +67,17 @@ export async function getMarkets(env: MarketsEnv, override?: string[]): Promise<
     : await getWatchlist(env);
   if (!list.length) return { updatedAt: new Date().toISOString(), items: [] };
 
-  const cacheKey = 'markets:cache:' + list.map(x => x.symbol).join('|');
-  const cached = await env.MONITOR.get(cacheKey);
-  if (cached) {
-    try {
-      const c = JSON.parse(cached);
-      if (Date.now() - Date.parse(c.updatedAt) < CACHE_MS && Array.isArray(c.items) && c.items.length) return c;
-    } catch { /* refresh below */ }
-  }
+  // Cache via the Cache API (free, no KV write quota). KV writes are reserved
+  // for the snapshot/ledger, whose daily budget is small.
+  const ck = new Request('https://radar.antist.ai/__markets?symbols=' + encodeURIComponent(list.map(x => x.symbol).join(',')), { method: 'GET' });
+  const cache = (caches as unknown as { default: { match(r: Request): Promise<Response | undefined>; put(r: Request, res: Response): Promise<void> } }).default;
+  try {
+    const hit = await cache.match(ck);
+    if (hit) { const c = await hit.json() as { updatedAt: string; items: MarketQuote[] }; if (Date.now() - Date.parse(c.updatedAt) < CACHE_MS && Array.isArray(c.items) && c.items.length) return c; }
+  } catch { /* refresh below */ }
   const items = (await Promise.all(list.map(quote))).filter((x): x is MarketQuote => x !== null);
   const out = { updatedAt: new Date().toISOString(), items };
-  if (items.length) await env.MONITOR.put(cacheKey, JSON.stringify(out), { expirationTtl: 60 });
+  if (items.length) { try { await cache.put(ck, new Response(JSON.stringify(out), { headers: { 'Content-Type': 'application/json', 'Cache-Control': 'max-age=10' } })); } catch { /* cache best-effort */ } }
   return out;
 }
 

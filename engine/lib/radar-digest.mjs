@@ -25,15 +25,13 @@ export function buildMarkdown(s, lang = 'zh', boards) {
   const L = pick(lang), t = T[lang] || T.zh;
   const list = (Array.isArray(boards) && boards.length) ? BOARDS.filter(b => boards.includes(b)) : BOARDS;
   const out = [`**${t.title} · ${jst(s.generatedAt)}**`, '', cut(s.digest?.[lang], 500), ''];
-  const PER = 15;
+  const PER = 3;
   for (const b of list) {
-    const items = (s.events || []).filter(e => e.category === b);
-    const shown = items.slice(0, PER);
-    out.push(`<details><summary>${EMOJI[b]} ${L[b]}（${items.length} 条）</summary>`, '');
+    const items = (s.events || []).filter(e => e.category === b).sort((x, y) => (y.score || 0) - (x.score || 0)).slice(0, PER);
+    out.push(`<details><summary>${EMOJI[b]} ${L[b]}（${items.length}）</summary>`, '');
     out.push('| 标题 | 内容 | 链接 |', '| --- | --- | --- |');
-    if (shown.length) for (const e of shown) { const dl = e.deadlineAt ? ('⏰ ' + String(e.deadlineAt).slice(0, 10) + ' · ') : ''; out.push(`| ${cut(e.title?.[lang], 40)} | ${cut(dl + (e.summary?.[lang] || e.action?.[lang]), 110)} | [链接](${e.url}) |`); }
+    if (items.length) for (const e of items) { const dl = e.deadlineAt ? ('⏰ ' + String(e.deadlineAt).slice(0, 10) + ' · ') : ''; out.push(`| ${cut(e.title?.[lang], 40)} | ${cut(dl + (e.summary?.[lang] || e.action?.[lang]), 110)} | [链接](${e.url}) |`); }
     else out.push(`| ${t.none} | — | — |`);
-    if (items.length > shown.length) out.push(`| … | 另有 ${items.length - shown.length} 条 | [更多](https://radar.antist.ai/${lang}/c/${b}) |`);
     out.push('', '</details>', '');
   }
   const fs = s.forecasts || [];
@@ -42,7 +40,7 @@ export function buildMarkdown(s, lang = 'zh', boards) {
   else out.push(`- ${t.nof}`);
   out.push('', '</details>', '');
   const actions = [];
-  for (const e of (s.events || [])) { const a = cell(e.action?.[lang]); if (a && !actions.includes(a)) actions.push(a); }
+  for (const e of [...(s.events || [])].sort((x, y) => (y.score || 0) - (x.score || 0))) { const a = cell(e.action?.[lang]); if (a && !actions.includes(a)) actions.push(a); if (actions.length >= 8) break; }
   out.push(`<details><summary>🔭 ${t.actions}（${actions.length}）</summary>`, '');
   if (actions.length) for (const a of actions.slice(0, 8)) out.push(`- ${a}`);
   else out.push('- （—）');
@@ -54,7 +52,7 @@ export function buildPlain(s, lang = 'zh', boards) {
   const L = pick(lang), t = T[lang] || T.zh;
   const list = (Array.isArray(boards) && boards.length) ? BOARDS.filter(b => boards.includes(b)) : BOARDS;
   const lines = [`${t.title} · ${jst(s.generatedAt)}`, '', cell(s.digest?.[lang]), ''];
-  for (const b of list) { const items = (s.events || []).filter(e => e.category === b); lines.push(`${EMOJI[b]} ${L[b]}（${items.length}）`); for (const e of items) lines.push(`· ${cell(e.title?.[lang])} — ${e.url}`); }
+  for (const b of list) { const items = (s.events || []).filter(e => e.category === b).sort((x, y) => (y.score || 0) - (x.score || 0)).slice(0, 3); lines.push(`${EMOJI[b]} ${L[b]}（${items.length}）`); for (const e of items) lines.push(`· ${cell(e.title?.[lang])} — ${e.url}`); }
   lines.push('', `${t.forecast}`); for (const f of (s.forecasts || [])) lines.push(`· ${f.symbol} ${f.direction} ${Math.round(Number(f.probability) * 100)}% ${f.dueAt.slice(0, 10)}`);
   lines.push('', `✅ ${t.actions}`); const acts = []; for (const e of (s.events || [])) { const a = cell(e.action?.[lang]); if (a && !acts.includes(a)) acts.push(a); } acts.slice(0, 8).forEach(a => lines.push(`· ${a}`));
   return lines.join('\n');

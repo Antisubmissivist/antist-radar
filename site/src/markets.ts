@@ -75,3 +75,20 @@ export async function getMarkets(env: MarketsEnv, override?: string[]): Promise<
   if (items.length) await env.MONITOR.put(cacheKey, JSON.stringify(out), { expirationTtl: 60 });
   return out;
 }
+
+export type SymbolHit = { symbol: string; name: string; type: string; exchange: string };
+
+export async function searchSymbols(q: string): Promise<SymbolHit[]> {
+  try {
+    const url = `https://query1.finance.yahoo.com/v1/finance/search?q=${encodeURIComponent(q)}&quotesCount=10&newsCount=0&enableFuzzyQuery=false`;
+    const r = await fetch(url, { headers: { 'User-Agent': 'Mozilla/5.0 (compatible; AntistRadar/1.0)' }, signal: AbortSignal.timeout(6000) });
+    if (!r.ok) return [];
+    const d = await r.json() as { quotes?: Record<string, unknown>[] };
+    return (d?.quotes || []).filter(x => x.symbol).map(x => ({
+      symbol: String(x.symbol),
+      name: String(x.shortname || x.longname || x.symbol),
+      type: String(x.typeDisp || x.quoteType || ''),
+      exchange: String(x.exchange || ''),
+    }));
+  } catch { return []; }
+}

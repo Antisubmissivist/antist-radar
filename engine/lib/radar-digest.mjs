@@ -31,7 +31,7 @@ export function buildMarkdown(s, lang = 'zh', boards) {
     const shown = items.slice(0, PER);
     out.push(`<details><summary>${EMOJI[b]} ${L[b]}（${items.length} 条）</summary>`, '');
     out.push('| 标题 | 内容 | 链接 |', '| --- | --- | --- |');
-    if (shown.length) for (const e of shown) out.push(`| ${cut(e.title?.[lang], 40)} | ${cut(e.summary?.[lang] || e.action?.[lang], 90)} | [链接](${e.url}) |`);
+    if (shown.length) for (const e of shown) { const dl = e.deadlineAt ? ('⏰ ' + String(e.deadlineAt).slice(0, 10) + ' · ') : ''; out.push(`| ${cut(e.title?.[lang], 40)} | ${cut(dl + (e.summary?.[lang] || e.action?.[lang]), 110)} | [链接](${e.url}) |`); }
     else out.push(`| ${t.none} | — | — |`);
     if (items.length > shown.length) out.push(`| … | 另有 ${items.length - shown.length} 条 | [更多](https://radar.antist.ai/${lang}/c/${b}) |`);
     out.push('', '</details>', '');

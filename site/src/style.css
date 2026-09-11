@@ -112,6 +112,28 @@
 
   .input { @apply flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50; }
 
+  /* shadcn-style native select (dark popup via color-scheme) */
+  select.select { appearance: none; color-scheme: light; padding-right: 2.25rem;
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2371717a' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E");
+    background-repeat: no-repeat; background-position: right .6rem center; background-size: 1rem; }
+  .dark select.select { color-scheme: dark; background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23a1a1aa' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m6 9 6 6 6-6'/%3E%3C/svg%3E"); }
+  select.select option { background-color: hsl(var(--popover)); color: hsl(var(--popover-foreground)); }
+
+  /* shadcn checkbox */
+  input.checkbox { appearance: none; width: 1rem; height: 1rem; flex: none; border-radius: calc(var(--radius) - 4px);
+    border: 1px solid hsl(var(--input)); background-color: transparent; background-position: center; background-repeat: no-repeat; background-size: .7rem;
+    transition: background-color .15s, border-color .15s; }
+  input.checkbox:checked { background-color: hsl(var(--primary)); border-color: hsl(var(--primary));
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%23fff' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
+  input.checkbox:focus-visible { outline: 2px solid hsl(var(--ring)); outline-offset: 2px; }
+
+  /* shadcn chip (toggle) */
+  .chip { @apply inline-flex items-center gap-2 rounded-full border px-3 py-1.5 text-xs font-medium text-muted-foreground transition-colors cursor-pointer select-none; }
+  .chip:hover { @apply bg-accent text-accent-foreground; }
+  .chip:has(input:checked) { @apply border-primary bg-primary text-primary-foreground; }
+  .chip:has(input:checked) input.checkbox { background-color: hsl(var(--primary-foreground)); border-color: hsl(var(--primary-foreground));
+    background-image: url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' width='16' height='16' viewBox='0 0 24 24' fill='none' stroke='%2318181b' stroke-width='3.5' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M20 6 9 17l-5-5'/%3E%3C/svg%3E"); }
+
   .tab { @apply inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-all hover:text-foreground; }
   .tab-active { @apply bg-background text-foreground shadow-sm; }
   .navlink { @apply inline-flex h-9 items-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground; }

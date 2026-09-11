@@ -127,9 +127,20 @@ if(subForm){
   const sep=LANG==='en'?'. ':'。';
   const STOP={en:'Stop',ja:'停止',zh:'停止'};
   const NONE={en:'Nothing to read',ja:'読み上げる内容がありません',zh:'暂无可朗读内容'};
+  // Prefer a male voice: the API has no gender field, so match known male voice names per language.
+  const MALE={ja:['ichiro','otoya','takehiro','keita','naoki','male'],zh:['kangkang','yunyang','yunjian','yunxi','male'],en:['david','mark','guy','daniel','alex','fred','google uk english male','male']};
   let idx=0,queue=[];
   const clean=s=>String(s).replace(/[↗→←·•|]/g,' ').replace(/\s+/g,' ').trim();
-  function pickVoice(){const vs=window.speechSynthesis.getVoices()||[];const b=LANG;return vs.find(v=>v.lang&&v.lang.toLowerCase().startsWith(b))||vs.find(v=>v.lang&&v.lang.toLowerCase().startsWith(bcp.slice(0,2)))||null;}
+  function pickVoice(){
+    const vs=window.speechSynthesis.getVoices()||[];
+    const pre=bcp.slice(0,2).toLowerCase();
+    const pool=vs.filter(v=>v.lang&&v.lang.toLowerCase().startsWith(pre));
+    if(!pool.length)return null;
+    const names=MALE[LANG]||MALE.en;
+    const males=pool.filter(v=>names.some(n=>v.name.toLowerCase().includes(n)));
+    const pick=(males.length?males:pool).slice().sort((a,b)=>(b.localService?1:0)-(a.localService?1:0));
+    return pick[0]||null;
+  }
   function parts(card,t){const out=[clean(t.textContent)];const s=card.querySelector('[data-tts-summary]');if(s)out.push(clean(s.textContent));const r=card.querySelector('[data-tts-review]');if(r)out.push(clean(r.textContent));return out.filter(Boolean);}
   function reset(){window.speechSynthesis.cancel();btns.forEach(b=>{b.textContent=b.dataset.label;});}
   function next(){

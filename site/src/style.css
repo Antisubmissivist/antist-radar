@@ -116,6 +116,16 @@
   .badge-secondary { @apply border-transparent bg-secondary text-secondary-foreground; }
   .badge-outline { @apply text-foreground; }
 
+  /* iOS-style app icon: glossy gradient + inner highlight + raised shadow */
+  .logo-icon { position: relative; display: grid; place-items: center;
+    width: 1.75rem; height: 1.75rem; border-radius: 0.55rem;
+    font-size: 0.75rem; font-weight: 800; line-height: 1; color: hsl(var(--primary-foreground));
+    background-image: linear-gradient(180deg, rgba(255,255,255,.34), rgba(255,255,255,0) 46%),
+      linear-gradient(180deg, hsl(var(--primary)), color-mix(in oklab, hsl(var(--primary)) 74%, black));
+    border: 1px solid rgba(255,255,255,.10);
+    box-shadow: inset 0 1px 0 rgba(255,255,255,.35), inset 0 -1px 1px rgba(0,0,0,.28),
+      0 5px 12px rgba(0,0,0,.34), 0 1px 2px rgba(0,0,0,.45); }
+
   .input { @apply flex h-9 w-full rounded-md border border-input bg-transparent px-3 py-1 text-sm shadow-sm transition-colors placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring disabled:opacity-50; }
 
   /* shadcn-style native select (dark popup via color-scheme) */

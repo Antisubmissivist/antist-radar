@@ -2,7 +2,7 @@
 // The watchlist lives in KV (radar:watchlist); callers may override per request
 // with an explicit symbol list so readers can add any ticker client-side.
 
-type MarketsEnv = { MONITOR: KVNamespace };
+type MarketsEnv = { DB: D1Database };
 
 export type WatchItem = { symbol: string; name: string };
 export type MarketQuote = { symbol: string; name: string; price: number; changePct: number; at: string; source: string };
@@ -27,15 +27,15 @@ export function normalizeSymbol(s: string): string {
 }
 
 export async function getWatchlist(env: MarketsEnv): Promise<WatchItem[]> {
-  const raw = await env.MONITOR.get('radar:watchlist');
-  if (raw) {
-    try { const a = JSON.parse(raw); if (Array.isArray(a) && a.length) return a; } catch { /* fall through */ }
-  }
+  try {
+    const r = await env.DB.prepare("SELECT v FROM settings WHERE k='watchlist'").first() as { v?: string } | null;
+    if (r && r.v) { const a = JSON.parse(r.v); if (Array.isArray(a) && a.length) return a; }
+  } catch { /* fall through */ }
   return DEFAULT_WATCHLIST;
 }
 
 export async function setWatchlist(env: MarketsEnv, list: WatchItem[]) {
-  await env.MONITOR.put('radar:watchlist', JSON.stringify(list));
+  await env.DB.prepare('INSERT INTO settings (k,v) VALUES (?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v').bind('watchlist', JSON.stringify(list)).run();
 }
 
 async function quote(item: WatchItem): Promise<MarketQuote | null> {

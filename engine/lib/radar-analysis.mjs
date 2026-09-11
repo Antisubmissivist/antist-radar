@@ -12,15 +12,19 @@ import {judgeEdition} from './radar-judge.mjs';
 async function selectByPersona(provider,pool){
   if(!pool.length)return [];
   try{
-    const r=await provider.complete(selectionSystemPrompt(),JSON.stringify(pool.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,220)}))),{maxTokens:6000,timeout:120000});
+    const r=await provider.complete(selectionSystemPrompt(),JSON.stringify(pool.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,200)}))),{maxTokens:8000,timeout:150000});
     const f=String(r.text||'').replace(/^```(?:json)?\s*|\s*```$/g,'').trim();const a=f.indexOf('{'),b=f.lastIndexOf('}');
     const j=JSON.parse(a>=0&&b>a?f.slice(a,b+1):f);
-    const byId=new Map(pool.map(e=>[e.id,e]));const out=[];
-    for(const row of (Array.isArray(j&&j.select)?j.select:[])){const id=String((row&&row.id)||'');const e=byId.get(id);if(e&&!out.includes(e)){e.score=Math.max(0,Math.min(100,Math.round(Number(row&&row.score)||0)));out.push(e);}}
-    out.sort((x,y)=>(y.score||0)-(x.score||0));
+    const byId=new Map(pool.map(e=>[e.id,e]));const scored=[];
+    for(const row of (Array.isArray(j&&j.items)?j.items:[])){const id=String((row&&row.id)||'');const e=byId.get(id);if(e&&!scored.includes(e)){e.score=Math.max(0,Math.min(100,Math.round(Number(row&&row.score)||0)));scored.push(e);}}
+    scored.sort((x,y)=>(y.score||0)-(x.score||0));
+    // Deterministic top-3 per board; fill from the (freshness-ordered) pool so a
+    // board with candidates always shows up to 3.
     const per=new Map();const capped=[];
-    for(const e of out){const n=per.get(e.category)||0;if(n>=3)continue;per.set(e.category,n+1);capped.push(e);}
-    console.error(`[radar] persona selected ${capped.length}/${pool.length}`);
+    const push=(e)=>{const n=per.get(e.category)||0;if(n>=3)return;per.set(e.category,n+1);capped.push(e);};
+    for(const e of scored)push(e);
+    for(const e of pool){if(capped.includes(e))continue;if(e.score===undefined)e.score=0;push(e);}
+    console.error(`[radar] persona scored ${scored.length}, capped ${capped.length}/${pool.length}`);
     return capped;
   }catch(e){console.error('[radar] persona selection failed:',e.message);return [];}
 }

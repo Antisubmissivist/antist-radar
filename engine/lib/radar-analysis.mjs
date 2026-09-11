@@ -63,7 +63,7 @@ Forecasts are explicitly experimental directional hypotheses, not advice. Provid
   let lastError;
   for(let attempt=1;attempt<=3;attempt++){
     try {
-      const r=await provider.complete(nativeInstructions,payload,{maxTokens:32768,timeout:150000});
+      const r=await provider.complete(nativeInstructions,payload,{maxTokens:32768,timeout:240000});
       await writeFile('runs/analysis-response.json',JSON.stringify({text:r.text,model:r.model,usage:r.usage,finishReason:r.finishReason,attempt}));
       if(r.finishReason==='length')throw new Error('Analysis output truncated; publication stopped');
       const fence=r.text.replace(/^```(?:json)?\s*|\s*```$/g,'').trim();

@@ -11,7 +11,7 @@ concurrency:
 jobs:
   sweep:
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    timeout-minutes: 25
     env:
       LLM_PROVIDER: opencode
       LLM_MODEL: ${{ secrets.LLM_MODEL }}

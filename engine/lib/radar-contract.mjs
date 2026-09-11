@@ -46,15 +46,16 @@ export function publicSnapshot(input, privateValues = []) {
   if (new Set(events.map(e=>e.id)).size!==events.length) throw new Error('Duplicate event');
   const markets=list(input.markets,50).map(q=>({symbol:text(q.symbol,24),name:text(q.name,80),price:number(q.price),changePct:number(q.changePct),at:timestamp(q.at),source:url(q.source)}));
   const sources=list(input.sources,80).map(s=>({name:text(s.name,80),status:choice(s.status,['ok','quiet','degraded','unavailable','stale']),count:number(s.count),url:url(s.url),fetchedAt:timestamp(s.fetchedAt)}));
-  const forecast=input.forecast ? {
-    id:text(input.forecast.id,80),createdAt:timestamp(input.forecast.createdAt),dueAt:timestamp(input.forecast.dueAt),
-    symbol:text(input.forecast.symbol,24),baseline:number(input.forecast.baseline),direction:choice(input.forecast.direction,['above','below']),
-    probability:number(input.forecast.probability),claim:multilingual(input.forecast.claim,500),rationale:multilingual(input.forecast.rationale,1000),
-    evidence:list(input.forecast.evidence,10).map(url),
-  } : null;
-  if (forecast && (forecast.probability<=0 || forecast.probability>=1 || Date.parse(forecast.dueAt)<=Date.parse(forecast.createdAt))) throw new Error('Invalid forecast');
+  const forecasts=list(input.forecasts,6).map(f=>({
+    id:text(f.id,80),createdAt:timestamp(f.createdAt),dueAt:timestamp(f.dueAt),
+    symbol:text(f.symbol,24),baseline:number(f.baseline),direction:choice(f.direction,['above','below']),
+    probability:number(f.probability),claim:multilingual(f.claim,500),rationale:multilingual(f.rationale,1000),
+    evidence:list(f.evidence,10).map(url),
+  }));
+  for (const f of forecasts) if (f.probability<=0 || f.probability>=1 || Date.parse(f.dueAt)<=Date.parse(f.createdAt)) throw new Error('Invalid forecast');
+  if (new Set(forecasts.map(f=>f.id)).size!==forecasts.length) throw new Error('Duplicate forecast');
   const out={schema:2,id:text(input.id,100),generatedAt:timestamp(input.generatedAt),sweepMs:number(input.sweepMs),
-    analysisStatus:choice(input.analysisStatus,['complete','degraded']),digest:multilingual(input.digest,2000),events,markets,sources,forecast};
+    analysisStatus:choice(input.analysisStatus,['complete','degraded']),digest:multilingual(input.digest,2000),events,markets,sources,forecasts};
   return assertPrivateFree(out,privateValues);
 }
 export function resolveForecast(forecast, quotes, now=Date.now()) {

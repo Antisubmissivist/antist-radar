@@ -18,9 +18,9 @@ export async function analyseRadar(events,markets) {
 ja 版は日本語だけで書く（簡体字や韓国語を混ぜない。例: 使わない語 本周・事业・半导体・主办）。en は英語のみ、zh は中国語（簡体字）のみ。
 All supplied candidate IDs must appear exactly once in EACH edition. Write short sentences. Do not add any facts absent from evidence. Each title is at most 100 characters; summary, audience, action and unknowns at most 160 characters each. Digest at most 240 characters.
 Important output rule: ALL narrative fields except title contain NO DIGITS, monetary amounts or dates. These are displayed separately by the application. Say what changed and what the reader should check; do not repeat quantities. Unknown eligibility means check requirements before applying. Drafts are consultations, not enacted rules. No causal claims based only on price.
-Return {"ja":{"digest":"...","items":[{"id":"supplied id","title":"...","summary":"...","audience":"...","action":"...","unknowns":"..."}],"forecastRationale":"..."},"en":{same shape},"zh":{same shape},"forecast":{"symbol":"BTC-USD","direction":"above or below","probability":0.51}}.
-Forecast is an explicitly experimental directional hypothesis, not advice. Choose a supplied fresh crypto quote and explain the evidence limits, without digits in rationale. Use null if no fresh quote. Probability must express uncertainty and must not be presented as a calibrated success rate.`;
-  const payload=JSON.stringify({candidates:candidates.map(e=>({id:e.id,source:e.source,category:e.category,title:e.title,evidence:e.evidence.slice(0,850),stage:e.stage,unknowns:e.unknowns})),markets:markets.filter(q=>['BTC-USD','ETH-USD'].includes(q.symbol)&&Date.now()-Date.parse(q.at)<3600000)});
+Return {"ja":{"digest":"...","items":[{"id":"supplied id","title":"...","summary":"...","audience":"...","action":"...","unknowns":"..."}]},"en":{same shape},"zh":{same shape},"forecasts":[{"symbol":"...","direction":"above or below","probability":0.51,"horizonDays":7,"rationale":{"ja":"...","en":"...","zh":"..."}}]}.
+Forecasts are explicitly experimental directional hypotheses, not advice. Provide at most one entry per board: at most one crypto and at most one stock or index, using ONLY supplied fresh quotes. horizonDays is 1-30. Every rationale explains the evidence limits and contains NO DIGITS. Probability expresses uncertainty and is not a calibrated success rate. Use an empty array if no fresh quote fits.`;
+  const payload=JSON.stringify({candidates:candidates.map(e=>({id:e.id,source:e.source,category:e.category,title:e.title,evidence:e.evidence.slice(0,850),stage:e.stage,unknowns:e.unknowns})),markets:markets.filter(q=>Date.now()-Date.parse(q.at)<3600000&&['BTC-USD','ETH-USD','SOL-USD','^GSPC','^IXIC','^N225','NVDA','MSFT','GOOGL','AVGO','TSM','7203.T'].includes(q.symbol))});
   // A single generation can echo the supplied IDs incorrectly (duplicate or missing in one
   // language). The publication boundary must stay strict, so regenerate a bounded number of
   // times instead of weakening the guard.
@@ -35,7 +35,7 @@ Forecast is an explicitly experimental directional hypothesis, not advice. Choos
       const raw=start>=0&&end>start?fence.slice(start,end+1):fence;
       let data;try{data=JSON.parse(raw);}catch{throw new Error(`Analysis JSON invalid (${raw.length} characters); publication stopped`);}
       const editionData=data;
-      data={digest:Object.fromEntries(LANGS.map(l=>[l,editionData[l]?.digest])),items:(editionData.en?.items||[]).map(row=>({id:row.id,...Object.fromEntries(['title','summary','audience','action','unknowns'].map(k=>[k,Object.fromEntries(LANGS.map(l=>[l,editionData[l]?.items?.find(i=>i.id===row.id)?.[k]]))]))})),forecast:editionData.forecast?{...editionData.forecast,rationale:Object.fromEntries(LANGS.map(l=>[l,editionData[l]?.forecastRationale]))}:null};
+      data={digest:Object.fromEntries(LANGS.map(l=>[l,editionData[l]?.digest])),items:(editionData.en?.items||[]).map(row=>({id:row.id,...Object.fromEntries(['title','summary','audience','action','unknowns'].map(k=>[k,Object.fromEntries(LANGS.map(l=>[l,editionData[l]?.items?.find(i=>i.id===row.id)?.[k]]))]))})),forecasts:editionData.forecasts||[]};
       const lookup=new Map(events.map(e=>[e.id,e]));const selected=[];
       for(const row of data.items||[]) {
         const original=lookup.get(row.id);if(!original||selected.some(e=>e.id===row.id))throw new Error('Invalid evidence ID');
@@ -49,15 +49,22 @@ Forecast is an explicitly experimental directional hypothesis, not advice. Choos
       multilingual(data.digest);
       validateEditorial(data.digest);
       if(/[\uac00-\ud7af]|本周|事业|半导体|主办/.test(data.digest.ja))throw new Error('Japanese digest contamination; publication stopped');
-      const f=data.forecast;let forecast=null;
-      const q=markets.find(q=>q.symbol===f?.symbol && ['BTC-USD','ETH-USD'].includes(q.symbol) && Date.now()-Date.parse(q.at)<3600000);
-      if(q&&['above','below'].includes(f.direction)&&f.probability>0&&f.probability<1) {
-        multilingual(f.rationale);validateEditorial(f.rationale);const createdAt=new Date().toISOString();const dueAt=new Date(Date.now()+86400000).toISOString();
-        const above=f.direction==='above';
-        forecast={id:`${createdAt.slice(0,10)}:market`,createdAt,dueAt,symbol:q.symbol,baseline:q.price,direction:f.direction,probability:f.probability,
-          claim:{ja:`期限後の最初の新しい観測で ${q.symbol} が基準値 ${q.price} を${above?'上回る':'下回る'}。`,en:`At the first fresh observation after the deadline, ${q.symbol} will be ${above?'above':'below'} the baseline ${q.price}.`,zh:`到期后首次新报价中，${q.symbol} 将${above?'高于':'低于'}基准值 ${q.price}。`},rationale:f.rationale,evidence:[q.source]};
+      const forecasts=[];
+      for(const f of (data.forecasts||[])){
+        const q=markets.find(q=>q.symbol===f?.symbol && Date.now()-Date.parse(q.at)<3600000);
+        if(!q||!['above','below'].includes(f.direction)||!(f.probability>0&&f.probability<1))continue;
+        if(forecasts.some(x=>x.symbol===q.symbol))continue;
+        // A bad rationale drops that board's forecast, never the whole publication.
+        try{
+          multilingual(f.rationale);validateEditorial(f.rationale);
+          if(/[\uac00-\ud7af]|本周|事业|半导体|主办/.test(f.rationale.ja))throw new Error('contamination');
+        }catch{continue;}
+        const horizon=Math.min(30,Math.max(1,Math.round(Number(f.horizonDays)||1)));
+        const createdAt=new Date().toISOString();const dueAt=new Date(Date.now()+horizon*86400000).toISOString();const above=f.direction==='above';
+        forecasts.push({id:`${createdAt.slice(0,10)}:${q.symbol}`,createdAt,dueAt,symbol:q.symbol,baseline:q.price,direction:f.direction,probability:f.probability,
+          claim:{ja:`期限後の最初の新しい観測で ${q.symbol} が基準値 ${q.price} を${above?'上回る':'下回る'}。`,en:`At the first fresh observation after the deadline, ${q.symbol} will be ${above?'above':'below'} the baseline ${q.price}.`,zh:`到期后首次新报价中，${q.symbol} 将${above?'高于':'低于'}基准值 ${q.price}。`},rationale:f.rationale,evidence:[q.source]});
       }
-      return {digest:data.digest,events:selected,forecast,usage:r.usage};
+      return {digest:data.digest,events:selected,forecasts,usage:r.usage};
     }catch(e){
       lastError=e;console.error(`[radar] analysis attempt ${attempt}/3 rejected: ${e.message}`);
     }

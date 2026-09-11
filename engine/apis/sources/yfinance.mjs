@@ -6,13 +6,14 @@ import { safeFetch } from '../utils/fetch.mjs';
 
 const BASE = 'https://query1.finance.yahoo.com/v8/finance/chart';
 
-// Symbols to track — covers broad market, rates, commodities, crypto, volatility
-const SYMBOLS = {
+// Symbols to track. Override with MARKET_SYMBOLS="SYM:Name,SYM:Name" in .env.
+const DEFAULTS = {
   // Indexes / ETFs
   '^GSPC': 'S&P 500',
   '^IXIC': 'Nasdaq Composite',
   '^DJI': 'Dow Jones',
   '^RUT': 'Russell 2000',
+  '^N225': 'Nikkei 225',
   // Rates / Credit
   TLT: '20Y+ Treasury',
   HYG: 'High Yield Corp',
@@ -26,9 +27,36 @@ const SYMBOLS = {
   // Crypto
   'BTC-USD': 'Bitcoin',
   'ETH-USD': 'Ethereum',
+  'SOL-USD': 'Solana',
+  // AI / tech
+  NVDA: 'NVIDIA',
+  MSFT: 'Microsoft',
+  GOOGL: 'Alphabet',
+  META: 'Meta',
+  AVGO: 'Broadcom',
+  TSM: 'TSMC',
+  AMD: 'AMD',
+  PLTR: 'Palantir',
+  SMH: 'Semiconductor ETF',
+  // Japan
+  '7203.T': 'Toyota',
+  '6758.T': 'Sony',
   // Volatility
   '^VIX': 'VIX',
 };
+function loadSymbols() {
+  const raw = process.env.MARKET_SYMBOLS;
+  if (!raw) return DEFAULTS;
+  const map = {};
+  for (const part of raw.split(',')) {
+    const idx = part.indexOf(':');
+    const sym = (idx >= 0 ? part.slice(0, idx) : part).trim();
+    const name = (idx >= 0 ? part.slice(idx + 1) : '').trim();
+    if (sym) map[sym] = name || sym;
+  }
+  return Object.keys(map).length ? map : DEFAULTS;
+}
+const SYMBOLS = loadSymbols();
 
 async function fetchQuote(symbol) {
   try {
@@ -118,10 +146,11 @@ export async function collect() {
       failed,
       timestamp: new Date().toISOString(),
     },
-    indexes: pickGroup(quotes, ['^GSPC', '^IXIC', '^DJI', '^RUT']),
+    indexes: pickGroup(quotes, ['^GSPC', '^IXIC', '^DJI', '^RUT', '^N225']),
+    stocks: pickGroup(quotes, ['NVDA', 'MSFT', 'GOOGL', 'META', 'AVGO', 'TSM', 'AMD', 'PLTR', 'SMH', '7203.T', '6758.T']),
     rates: pickGroup(quotes, ['TLT', 'HYG', 'LQD']),
     commodities: pickGroup(quotes, ['GC=F', 'SI=F', 'CL=F', 'BZ=F', 'NG=F']),
-    crypto: pickGroup(quotes, ['BTC-USD', 'ETH-USD']),
+    crypto: pickGroup(quotes, ['BTC-USD', 'ETH-USD', 'SOL-USD']),
     volatility: pickGroup(quotes, ['^VIX']),
   };
 }

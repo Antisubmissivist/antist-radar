@@ -30,7 +30,7 @@ const analysis=await analyseRadar(delta.events.filter(e=>eligibility(e)!=='ineli
 const known={YFinance:'https://finance.yahoo.com/',AIInfra:'https://news.ycombinator.com/',Japan:'https://www.jma.go.jp/',FX:'https://www.frankfurter.app/',GDELT:'https://www.gdeltproject.org/','CISA-KEV':'https://www.cisa.gov/known-exploited-vulnerabilities-catalog'};
 const health=sweep.health;const sources=Object.keys(sweep.timing||{}).filter(n=>n!=='Positions').map(name=>({name,url:known[name]||'https://github.com/calesthio/Crucix',fetchedAt:sweep.crucix.timestamp,status:health.ok.includes(name)?'ok':health.dead.some(x=>x.name===name)?'unavailable':'degraded',count:0}));
 sources.push(...feeds.map(f=>({name:f.name,url:f.url,fetchedAt:f.fetchedAt,status:f.status,count:f.items.length})));
-const candidate={schema:2,id:createHash('sha256').update(now).digest('hex').slice(0,24),generatedAt:now,sweepMs,analysisStatus:'complete',digest:analysis.digest,events:analysis.events,markets,sources,forecast:analysis.forecast};
+const candidate={schema:2,id:createHash('sha256').update(now).digest('hex').slice(0,24),generatedAt:now,sweepMs,analysisStatus:'complete',digest:analysis.digest,events:analysis.events,markets,sources,forecasts:analysis.forecasts};
 const secrets=['LLM_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','BYREAL_WALLET','ACLED_EMAIL','ACLED_PASSWORD'].map(k=>process.env[k]).filter(Boolean);
 const snapshot=publicSnapshot(candidate,secrets);await atomic('runs/public.json',snapshot);
 if(push){

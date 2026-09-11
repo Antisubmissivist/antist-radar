@@ -12,7 +12,7 @@ const parseJson=t=>{const f=String(t||'').replace(/^```(?:json)?\s*|\s*```$/g,''
 async function selectByPersona(provider,pool){
   if(!pool.length)return [];
   try{
-    const r=await provider.complete(selectionSystemPrompt(),JSON.stringify(pool.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,200)}))),{maxTokens:8000,timeout:150000});
+    const r=await provider.complete(selectionSystemPrompt(),JSON.stringify(pool.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,180)}))),{maxTokens:12000,timeout:180000});
     const j=parseJson(r.text);
     const byId=new Map(pool.map(e=>[e.id,e]));const scored=[];
     for(const row of (Array.isArray(j&&j.items)?j.items:[])){const id=String((row&&row.id)||'');const e=byId.get(id);if(e&&!scored.includes(e)){e.score=Math.max(0,Math.min(100,Math.round(Number(row&&row.score)||0)));scored.push(e);}}
@@ -25,7 +25,7 @@ async function selectByPersona(provider,pool){
     return capped;
   }catch(e){console.error('[radar] persona selection failed:',e.message);return [];}
 }
-function roundRobin(sorted,limit){const byCat=new Map();for(const e of sorted){const a=byCat.get(e.category)||[];if(a.length<3)a.push(e);byCat.set(e.category,a);}const lists=[...byCat.values()].filter(l=>l.length);const out=[];while(out.length<limit&&lists.some(l=>l.length)){for(const l of lists){if(out.length>=limit)break;if(l.length)out.push(l.shift());}}return out;}
+function roundRobin(sorted,limit){const byCat=new Map();for(const e of sorted){const a=byCat.get(e.category)||[];if(a.length<5)a.push(e);byCat.set(e.category,a);}const lists=[...byCat.values()].filter(l=>l.length);const out=[];while(out.length<limit&&lists.some(l=>l.length)){for(const l of lists){if(out.length>=limit)break;if(l.length)out.push(l.shift());}}return out;}
 
 const ITEM_SYS=`あなたは日本語・英語・中国語の編集者です。与えられた候補だけを扱い、各言語の読者に自然な独立した文章を書きます。出力は JSON のみ。
 - 与えられた候補 ID を EACH 言語版に必ず一度ずつ、与えられた順序どおりに含める。ID を捏造しない。
@@ -38,31 +38,41 @@ Return {"ja":{"items":[{"id":"...","title":"...","summary":"...","audience":"...
 const DIGEST_SYS=`次の見出し一覧から、日本語・英語・中国語で短い総括を書く。各 ≤240 文字、数字・金額・日付なし。JSON のみ: {"ja":"...","en":"...","zh":"..."}`;
 const FORECAST_SYS=`新しく取得した市場クオートだけを使い、暗号資産を最大1つ・株式/指数を最大1つ、実験的な方向性仮説を作る。rationale は数字なし。JSON のみ: {"forecasts":[{"symbol":"...","direction":"above or below","probability":0.51,"horizonDays":7,"rationale":{"ja":"...","en":"...","zh":"..."}}]}`;
 
-// Fan-out: run several model calls in parallel and merge, instead of one large call.
-// Each call is retried on its own, so a single bad generation does not sink the run.
+// Fan-out with bounded concurrency and per-batch retries; every batch must succeed
+// (the caller also checks coverage) so a board never silently loses its items.
 async function runItems(provider,candidates){
-  const batches=chunk(candidates,4);
-  const results=await Promise.all(batches.map(async b=>{
-    for(let t=1;t<=2;t++){
-      try{
-        const r=await provider.complete(ITEM_SYS,JSON.stringify({candidates:b.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,800),stage:e.stage,unknowns:e.unknowns}))}),{maxTokens:20000,timeout:240000});
-        const j=parseJson(r.text);if(j&&j.en&&Array.isArray(j.en.items)&&j.ja&&j.zh)return j;
-        throw new Error('bad shape');
-      }catch(e){console.error('[radar] batch attempt',t,'failed:',e.message);}
-    }
-    return null;
-  }));
+  const batches=chunk(candidates,3);
   const lanes={ja:[],en:[],zh:[]};
-  for(const res of results){if(!res)continue;for(const l of ['ja','en','zh']){const items=res[l]&&res[l].items;if(Array.isArray(items))lanes[l].push(...items);}}
+  const pending=batches.slice();
+  const merge=(res)=>{for(const l of ['ja','en','zh']){const items=res[l]&&res[l].items;if(Array.isArray(items))lanes[l].push(...items);}};
+  async function worker(){
+    while(pending.length){
+      const b=pending.shift();
+      let ok=false;
+      for(let t=1;t<=3&&!ok;t++){
+        try{
+          const r=await provider.complete(ITEM_SYS,JSON.stringify({candidates:b.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,800),stage:e.stage,unknowns:e.unknowns}))}),{maxTokens:20000,timeout:240000});
+          const j=parseJson(r.text);
+          if(j&&j.en&&Array.isArray(j.en.items)&&j.ja&&j.zh){const ids=new Set(j.en.items.map(i=>i&&i.id));if(b.every(e=>ids.has(e.id))){merge(j);ok=true;break;}}
+          throw new Error('bad shape or incomplete');
+        }catch(e){console.error('[radar] batch attempt',t,'failed:',e.message);}
+      }
+      if(!ok)console.error('[radar] batch gave up:',b.map(e=>e.id).join(','));
+    }
+  }
+  const conc=Math.max(1,Math.min(3,batches.length));
+  await Promise.all(Array.from({length:conc},()=>worker()));
   return lanes;
 }
 
 export async function analyseRadar(events,markets){
   const provider=createLLMProvider({...config.llm,provider:process.env.RADAR_LLM_PROVIDER||config.llm.provider,model:process.env.RADAR_LLM_MODEL||config.llm.model});if(!provider?.isConfigured)throw new Error('Analysis provider unavailable');
   const sorted=[...events].sort((a,b)=>Date.parse(b.publishedAt||b.fetchedAt)-Date.parse(a.publishedAt||a.fetchedAt));
-  const pool=roundRobin(sorted,24);
+  // Whole candidate pool (all eligible changed events across boards; 120 safety cap),
+  // scored by the persona; the code then takes the top 3 per board.
+  const pool=sorted.slice(0,120);
   const picked=await selectByPersona(provider,pool);
-  const candidates=picked.length?picked:pool.slice(0,15);
+  const candidates=picked.length?picked:roundRobin(sorted,21);
   const freshMarkets=markets.filter(q=>Date.now()-Date.parse(q.at)<3600000&&['BTC-USD','ETH-USD','SOL-USD','^GSPC','^IXIC','^N225','NVDA','MSFT','GOOGL','AVGO','TSM','7203.T'].includes(q.symbol));
   let lastError;
   for(let attempt=1;attempt<=3;attempt++){
@@ -72,6 +82,9 @@ export async function analyseRadar(events,markets){
         (async()=>{for(let t=1;t<=2;t++){try{const r=await provider.complete(DIGEST_SYS,JSON.stringify(candidates.map(e=>({title:e.title,source:e.source,category:e.category}))),{maxTokens:3000,timeout:120000});const j=parseJson(r.text);if(j&&typeof j.ja==='string'&&typeof j.en==='string'&&typeof j.zh==='string')return j;}catch(e){console.error('[radar] digest attempt',t,'failed:',e.message);}}return null;})(),
         (async()=>{for(let t=1;t<=2;t++){try{const r=await provider.complete(FORECAST_SYS,JSON.stringify({markets:freshMarkets}),{maxTokens:3000,timeout:120000});const j=parseJson(r.text);if(j&&Array.isArray(j.forecasts))return j;}catch(e){console.error('[radar] forecast attempt',t,'failed:',e.message);}}return null;})(),
       ]);
+      const have=new Set(lanes.en.map(i=>i&&i.id));
+      const missing=candidates.filter(c=>!have.has(c.id));
+      if(missing.length)throw new Error('Incomplete analysis: '+missing.length+' of '+candidates.length+' candidates missing');
       const editionData={ja:{digest:dig&&dig.ja,items:lanes.ja},en:{digest:dig&&dig.en,items:lanes.en},zh:{digest:dig&&dig.zh,items:lanes.zh},forecasts:(fc&&fc.forecasts)||[]};
       await writeFile('runs/analysis-response.json',JSON.stringify({attempt,editionData}));
       const judged=judgeEdition(editionData,events,markets);

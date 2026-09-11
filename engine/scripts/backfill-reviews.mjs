@@ -11,8 +11,9 @@ if (!token) throw new Error('Missing RADAR_INGEST_TOKEN');
 const provider = createLLMProvider({...config.llm, provider: process.env.RADAR_LLM_PROVIDER || config.llm.provider, model: process.env.RADAR_LLM_MODEL || config.llm.model});
 if (!provider?.isConfigured) throw new Error('provider unavailable');
 
-const SYS = `你为《Antist Radar》写每条新闻的「本站评价」。从三种视角里挑最贴切的一种，写成 2–4 句、纯评价（不是建议）：不要祈使句、不要建议、不要行动步骤、不要套话、不要点出视角名、不要数字。
-视角：(a) 现代世俗人文主义（人的尊严/权利/福祉；自由与不自由制度不等价）；(b) 逃离主义（对体系的依赖与退出权：迁移/自建/脱钩/可携带能力资产）；(c) AI本主义（AI 成为新的结构中心：能力整合→结构自足→自我立法）。
+const SYS = `你为《Antist Radar》写每条新闻的「本站评价」。固定用**现代世俗人文主义**视角：以人的尊严、权利与福祉为尺度；自由社会确实优于不自由社会，这是立场而非中立比较。
+要求：2–4 句、不超过 300 字，必须具体到这条新闻（不能是放之四海的泛泛之谈）；观点鲜明，说清对普通人意味着什么、为什么重要；用大白话，具体意象多于抽象名词；生动但不口号化。
+这是**评价不是建议**：禁止祈使句、建议、行动步骤、套话；不要自报用了什么视角；不要数字。
 只输出 JSON：{"items":[{"id":"给定id","action":{"ja":"...","en":"...","zh":"..."}}]}。ja 用日语、en 用英语、zh 用简体中文，同一含义。`;
 
 let all = [];

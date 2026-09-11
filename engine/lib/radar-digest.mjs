@@ -21,11 +21,12 @@ const cut = (s, n) => { const t = cell(s); return t.length > n ? t.slice(0, n - 
 const jst = iso => new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 10);
 const pick = (lang) => (LABEL[lang] || LABEL.zh);
 
-export function buildMarkdown(s, lang = 'zh') {
+export function buildMarkdown(s, lang = 'zh', boards) {
   const L = pick(lang), t = T[lang] || T.zh;
+  const list = (Array.isArray(boards) && boards.length) ? BOARDS.filter(b => boards.includes(b)) : BOARDS;
   const out = [`**${t.title} · ${jst(s.generatedAt)}**`, '', cut(s.digest?.[lang], 500), ''];
   const PER = 15;
-  for (const b of BOARDS) {
+  for (const b of list) {
     const items = (s.events || []).filter(e => e.category === b);
     const shown = items.slice(0, PER);
     out.push(`<details><summary>${EMOJI[b]} ${L[b]}（${items.length} 条）</summary>`, '');
@@ -49,10 +50,11 @@ export function buildMarkdown(s, lang = 'zh') {
   return out.join('\n');
 }
 
-export function buildPlain(s, lang = 'zh') {
+export function buildPlain(s, lang = 'zh', boards) {
   const L = pick(lang), t = T[lang] || T.zh;
+  const list = (Array.isArray(boards) && boards.length) ? BOARDS.filter(b => boards.includes(b)) : BOARDS;
   const lines = [`${t.title} · ${jst(s.generatedAt)}`, '', cell(s.digest?.[lang]), ''];
-  for (const b of BOARDS) { const items = (s.events || []).filter(e => e.category === b); lines.push(`${EMOJI[b]} ${L[b]}（${items.length}）`); for (const e of items) lines.push(`· ${cell(e.title?.[lang])} — ${e.url}`); }
+  for (const b of list) { const items = (s.events || []).filter(e => e.category === b); lines.push(`${EMOJI[b]} ${L[b]}（${items.length}）`); for (const e of items) lines.push(`· ${cell(e.title?.[lang])} — ${e.url}`); }
   lines.push('', `${t.forecast}`); for (const f of (s.forecasts || [])) lines.push(`· ${f.symbol} ${f.direction} ${Math.round(Number(f.probability) * 100)}% ${f.dueAt.slice(0, 10)}`);
   lines.push('', `✅ ${t.actions}`); const acts = []; for (const e of (s.events || [])) { const a = cell(e.action?.[lang]); if (a && !acts.includes(a)) acts.push(a); } acts.slice(0, 8).forEach(a => lines.push(`· ${a}`));
   return lines.join('\n');

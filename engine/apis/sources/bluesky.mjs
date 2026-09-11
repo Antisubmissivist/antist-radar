@@ -62,6 +62,7 @@ export async function briefing() {
   return {
     source: 'Bluesky',
     timestamp: new Date().toISOString(),
+    ...(allPosts.length === 0 ? { blueskyError: 'public search returned 0 posts (HTTP 403 — anonymous API blocked)' } : {}),
     topics: {
       conflict: topicResults.conflict || [],
       markets: topicResults.markets || [],

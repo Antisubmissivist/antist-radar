@@ -15,6 +15,8 @@ export async function searchEvents(query = '', opts = {}) {
     timespan = '24h',       // e.g. "24h", "7d", "3m"
     format = 'json',
     sortBy = 'DateDesc',    // DateDesc, DateAsc, ToneDesc, ToneAsc
+    retries = 1,
+    retryDelayMs = 6000,
   } = opts;
 
   // If no query, use broad geopolitical terms
@@ -28,7 +30,7 @@ export async function searchEvents(query = '', opts = {}) {
     sort: sortBy,
   });
 
-  return safeFetch(`${BASE}/doc/doc?${params}`, { timeout: 14000, retryDelayMs: 6000 });
+  return safeFetch(`${BASE}/doc/doc?${params}`, { timeout: 14000, retries, retryDelayMs });
 }
 
 // Get tone/sentiment timeline for a topic
@@ -91,10 +93,11 @@ function delay(ms) { return new Promise(r => setTimeout(r, ms)); }
 
 // Briefing mode — get top global events summary (sequential due to rate limit)
 export async function briefing() {
-  // Single broad query to stay within rate limits
+  // Short query + patient retry: GDELT returns HTTP 429 on long OR queries and
+  // on bursts, so fewer terms plus backoff recovers far more often.
   const all = await searchEvents(
-    'conflict OR military OR economy OR crisis OR war OR sanctions OR tariff OR strike OR outbreak',
-    { maxRecords: 50, timespan: '24h' }
+    'conflict OR sanctions OR military OR election',
+    { maxRecords: 40, timespan: '24h', retries: 1, retryDelayMs: 6000 }
   );
 
   const articles = (all?.articles || []).map(compactArticle);

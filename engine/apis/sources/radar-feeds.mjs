@@ -124,6 +124,14 @@ async function stocks() {
   }
   return {items,scanned};
 }
+// Bridge for topics whose primary source has no usable feed (e-Stat needs an API
+// key, UR blocks bots). Google News is a labelled secondary aggregator; the
+// reader is sent to the publisher, and primary sources are preferred when added.
+async function gnews(source,category,query) {
+  const url=`https://news.google.com/rss/search?q=${encodeURIComponent(query)}&hl=ja&gl=JP&ceid=JP:ja`;
+  const all=parseFeed(await request(url));
+  return {scanned:all.length,items:all.slice(0,8).map(x=>event(source,category,{...x,sourceId:x.url}))};
+}
 export const FEEDS=[
   {name:'GitHub Releases',url:'https://docs.github.com/en/rest/releases/releases',collect:releases},
   {name:'ClawFeed',url:'https://clawfeed.kevinhe.io/',collect:clawfeed},
@@ -142,6 +150,8 @@ export const FEEDS=[
   {name:'BBC World',url:'https://feeds.bbci.co.uk/news/world/rss.xml',collect:()=>feed('BBC World','geopolitics','https://feeds.bbci.co.uk/news/world/rss.xml')},
   {name:'Al Jazeera',url:'https://www.aljazeera.com/xml/rss/all.xml',collect:()=>feed('Al Jazeera','geopolitics','https://www.aljazeera.com/xml/rss/all.xml')},
   {name:'DW World',url:'https://rss.dw.com/rdf/rss-en-world',collect:()=>feed('DW World','geopolitics','https://rss.dw.com/rdf/rss-en-world')},
+  {name:'Google News · 在留',url:'https://news.google.com/rss/search',collect:()=>gnews('Google News · 在留','japan-residence','在留資格 OR 出入国在留管理庁 OR 在留手続')},
+  {name:'Google News · UR/住宅',url:'https://news.google.com/rss/search',collect:()=>gnews('Google News · UR/住宅','japan-life','UR賃貸 OR 公営住宅 募集')},
 ];
 export async function collectFeeds() {
   return Promise.all(FEEDS.map(async f=>{

@@ -11,9 +11,9 @@ const LABEL = {
   en: { ai: 'AI', tech: 'Tech', 'japan-residence': 'Residency & rules', 'japan-life': 'Japan life', geopolitics: 'Geopolitics', crypto: 'Crypto', stocks: 'Stocks' },
 };
 const T = {
-  zh: { title: '每日简报', forecast: '预测', actions: '三视角评价', none: '（今日无更新）', nof: '（暂无已发布预测）' },
-  ja: { title: 'デイリーブリーフ', forecast: '予測', actions: '三つの視点', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）' },
-  en: { title: 'Daily brief', forecast: 'Forecasts', actions: 'Three-lens read', none: '(no updates today)', nof: '(no published forecasts yet)' },
+  zh: { title: '每日简报', forecast: '预测', actions: '本站评价', none: '（今日无更新）', nof: '（暂无已发布预测）' },
+  ja: { title: 'デイリーブリーフ', forecast: '予測', actions: '本サイトの見解', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）' },
+  en: { title: 'Daily brief', forecast: 'Forecasts', actions: "Editor's take", none: '(no updates today)', nof: '(no published forecasts yet)' },
 };
 
 const cell = s => String(s ?? '').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();

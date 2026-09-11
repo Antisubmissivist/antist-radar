@@ -1,0 +1,31 @@
+name: Telegram brief
+on:
+  schedule:
+    - cron: '0 23 * * *'   # 08:00 JST
+  workflow_dispatch:
+    inputs:
+      lang:
+        description: 'Language (ja|en|zh)'
+        default: 'zh'
+permissions:
+  contents: read
+concurrency:
+  group: radar-telegram
+  cancel-in-progress: false
+jobs:
+  send:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      RADAR_URL: https://radar.antist.ai
+      BRIEF_LANG: ${{ github.event.inputs.lang || 'zh' }}
+      TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
+      TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+      # Pure Node (built-ins + global fetch): no npm install needed.
+      - run: node scripts/telegram-brief.mjs
+        working-directory: engine

@@ -11,9 +11,9 @@ const LABEL = {
   en: { ai: 'AI', tech: 'Tech', 'japan-residence': 'Residency & rules', 'japan-life': 'Japan life', geopolitics: 'Geopolitics', crypto: 'Crypto', stocks: 'Stocks' },
 };
 const T = {
-  zh: { title: '每日简报', forecast: '预测', actions: '本站评价', none: '（今日无更新）', nof: '（暂无已发布预测）' },
-  ja: { title: 'デイリーブリーフ', forecast: '予測', actions: '本サイトの見解', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）' },
-  en: { title: 'Daily brief', forecast: 'Forecasts', actions: "Editor's take", none: '(no updates today)', nof: '(no published forecasts yet)' },
+  zh: { title: '每日简报', forecast: '预测', none: '（今日无更新）', nof: '（暂无已发布预测）' },
+  ja: { title: 'デイリーブリーフ', forecast: '予測', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）' },
+  en: { title: 'Daily brief', forecast: 'Forecasts', none: '(no updates today)', nof: '(no published forecasts yet)' },
 };
 
 const cell = s => String(s ?? '').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
@@ -38,12 +38,6 @@ export function buildMarkdown(s, lang = 'zh', boards) {
   out.push(`<details><summary>🔮 ${t.forecast}（${fs.length}）</summary>`, '');
   if (fs.length) for (const f of fs) out.push(`- \`${f.symbol}\` ${f.direction === 'above' ? '↑' : '↓'} · ${Math.round(Number(f.probability) * 100)}% · ${f.dueAt.slice(0, 10)} — ${cut(f.claim?.[lang], 120)}`);
   else out.push(`- ${t.nof}`);
-  out.push('', '</details>', '');
-  const actions = [];
-  for (const e of [...(s.events || [])].sort((x, y) => (y.score || 0) - (x.score || 0))) { const a = cell(e.action?.[lang]); if (a && !actions.includes(a)) actions.push(a); if (actions.length >= 8) break; }
-  out.push(`<details><summary>🔭 ${t.actions}（${actions.length}）</summary>`, '');
-  if (actions.length) for (const a of actions.slice(0, 8)) out.push(`- ${a}`);
-  else out.push('- （—）');
   out.push('', '</details>');
   return out.join('\n');
 }
@@ -54,6 +48,5 @@ export function buildPlain(s, lang = 'zh', boards) {
   const lines = [`${t.title} · ${jst(s.generatedAt)}`, '', cell(s.digest?.[lang]), ''];
   for (const b of list) { const items = (s.events || []).filter(e => e.category === b).sort((x, y) => (y.score || 0) - (x.score || 0)).slice(0, 3); lines.push(`${EMOJI[b]} ${L[b]}（${items.length}）`); for (const e of items) lines.push(`· ${cell(e.title?.[lang])} — ${e.url}`); }
   lines.push('', `${t.forecast}`); for (const f of (s.forecasts || [])) lines.push(`· ${f.symbol} ${f.direction} ${Math.round(Number(f.probability) * 100)}% ${f.dueAt.slice(0, 10)}`);
-  lines.push('', `✅ ${t.actions}`); const acts = []; for (const e of (s.events || [])) { const a = cell(e.action?.[lang]); if (a && !acts.includes(a)) acts.push(a); } acts.slice(0, 8).forEach(a => lines.push(`· ${a}`));
   return lines.join('\n');
 }

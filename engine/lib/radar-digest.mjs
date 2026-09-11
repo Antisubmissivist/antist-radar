@@ -11,9 +11,9 @@ const LABEL = {
   en: { ai: 'AI', tech: 'Tech', 'japan-residence': 'Residency & rules', 'japan-life': 'Japan life', geopolitics: 'Geopolitics', crypto: 'Crypto', stocks: 'Stocks' },
 };
 const T = {
-  zh: { title: '每日简报', forecast: '预测', actions: '今日最小动作', none: '（今日无更新）', nof: '（暂无已发布预测）' },
-  ja: { title: 'デイリーブリーフ', forecast: '予測', actions: '今日の最小アクション', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）' },
-  en: { title: 'Daily brief', forecast: 'Forecasts', actions: "Today's smallest actions", none: '(no updates today)', nof: '(no published forecasts yet)' },
+  zh: { title: '每日简报', forecast: '预测', actions: '三视角评价', none: '（今日无更新）', nof: '（暂无已发布预测）' },
+  ja: { title: 'デイリーブリーフ', forecast: '予測', actions: '三つの視点', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）' },
+  en: { title: 'Daily brief', forecast: 'Forecasts', actions: 'Three-lens read', none: '(no updates today)', nof: '(no published forecasts yet)' },
 };
 
 const cell = s => String(s ?? '').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
@@ -43,8 +43,8 @@ export function buildMarkdown(s, lang = 'zh', boards) {
   out.push('', '</details>', '');
   const actions = [];
   for (const e of (s.events || [])) { const a = cell(e.action?.[lang]); if (a && !actions.includes(a)) actions.push(a); }
-  out.push(`<details><summary>✅ ${t.actions}（${actions.length}）</summary>`, '');
-  if (actions.length) for (const a of actions.slice(0, 8)) out.push(`- [ ] ${a}`);
+  out.push(`<details><summary>🔭 ${t.actions}（${actions.length}）</summary>`, '');
+  if (actions.length) for (const a of actions.slice(0, 8)) out.push(`- ${a}`);
   else out.push('- （—）');
   out.push('', '</details>');
   return out.join('\n');

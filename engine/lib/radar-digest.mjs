@@ -11,9 +11,9 @@ const LABEL = {
   en: { ai: 'AI', tech: 'Tech', 'japan-residence': 'Residency & rules', 'japan-life': 'Japan life', geopolitics: 'Geopolitics', crypto: 'Crypto', stocks: 'Stocks' },
 };
 const T = {
-  zh: { title: '每日简报', forecast: '预测', none: '（今日无更新）', nof: '（暂无已发布预测）' },
-  ja: { title: 'デイリーブリーフ', forecast: '予測', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）' },
-  en: { title: 'Daily brief', forecast: 'Forecasts', none: '(no updates today)', nof: '(no published forecasts yet)' },
+  zh: { title: '每日简报', forecast: '预测', none: '（今日无更新）', nof: '（暂无已发布预测）', more: '想看更多内容，请访问本站' },
+  ja: { title: 'デイリーブリーフ', forecast: '予測', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）', more: 'もっと見るなら本サイトへ' },
+  en: { title: 'Daily brief', forecast: 'Forecasts', none: '(no updates today)', nof: '(no published forecasts yet)', more: 'More updates on the site' },
 };
 
 const cell = s => String(s ?? '').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
@@ -39,6 +39,7 @@ export function buildMarkdown(s, lang = 'zh', boards) {
   if (fs.length) for (const f of fs) out.push(`- \`${f.symbol}\` ${f.direction === 'above' ? '↑' : '↓'} · ${Math.round(Number(f.probability) * 100)}% · ${f.dueAt.slice(0, 10)} — ${cut(f.claim?.[lang], 120)}`);
   else out.push(`- ${t.nof}`);
   out.push('', '</details>');
+  out.push('', `📡 ${t.more} → [radar.antist.ai](https://radar.antist.ai/${lang})`);
   return out.join('\n');
 }
 
@@ -48,5 +49,6 @@ export function buildPlain(s, lang = 'zh', boards) {
   const lines = [`${t.title} · ${jst(s.generatedAt)}`, '', cell(s.digest?.[lang]), ''];
   for (const b of list) { const items = (s.events || []).filter(e => e.category === b).sort((x, y) => (y.score || 0) - (x.score || 0)).slice(0, 3); lines.push(`${EMOJI[b]} ${L[b]}（${items.length}）`); for (const e of items) lines.push(`· ${cell(e.title?.[lang])} — ${e.url}`); }
   lines.push('', `${t.forecast}`); for (const f of (s.forecasts || [])) lines.push(`· ${f.symbol} ${f.direction} ${Math.round(Number(f.probability) * 100)}% ${f.dueAt.slice(0, 10)}`);
+  lines.push('', `📡 ${t.more} → https://radar.antist.ai/${lang}`);
   return lines.join('\n');
 }

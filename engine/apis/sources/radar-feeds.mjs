@@ -135,6 +135,11 @@ async function gnews(source,category,query) {
 export const FEEDS=[
   {name:'GitHub Releases',url:'https://docs.github.com/en/rest/releases/releases',collect:releases},
   {name:'ClawFeed',url:'https://clawfeed.kevinhe.io/',collect:clawfeed},
+  {name:'The Verge',url:'https://www.theverge.com/rss/index.xml',collect:()=>feed('The Verge','tech','https://www.theverge.com/rss/index.xml')},
+  {name:'Ars Technica',url:'https://feeds.arstechnica.com/arstechnica/index',collect:()=>feed('Ars Technica','tech','https://feeds.arstechnica.com/arstechnica/index')},
+  {name:'TechCrunch',url:'https://techcrunch.com/feed/',collect:()=>feed('TechCrunch','tech','https://techcrunch.com/feed/')},
+  {name:'Engadget',url:'https://www.engadget.com/rss.xml',collect:()=>feed('Engadget','tech','https://www.engadget.com/rss.xml')},
+  {name:'9to5Mac',url:'https://9to5mac.com/feed/',collect:()=>feed('9to5Mac','tech','https://9to5mac.com/feed/')},
   {name:'JVN',url:'https://jvn.jp/rss/',collect:()=>feed('JVN','japan-life','https://jvn.jp/rss/jvn.rdf')},
   {name:'e-Gov',url:'https://public-comment.e-gov.go.jp/',collect:policies},
   {name:'JGrants',url:'https://developers.digital.go.jp/documents/jgrants/api/',collect:grants},

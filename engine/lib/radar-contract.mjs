@@ -1,6 +1,6 @@
 // Shared publication boundary. Pure functions: safe to import in the Worker.
 export const LANGS = ['ja', 'en', 'zh'];
-export const CATEGORIES = ['ai', 'japan-residence', 'japan-life', 'geopolitics', 'crypto', 'stocks'];
+export const CATEGORIES = ['ai', 'tech', 'japan-residence', 'japan-life', 'geopolitics', 'crypto', 'stocks'];
 export function text(value, max = 1500) {
   if (typeof value !== 'string' || value.length > max) throw new Error('Invalid text');
   if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value)) throw new Error('Control character');

@@ -2,6 +2,10 @@ const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const cookie={get(n){const m=document.cookie.match('(?:^|; )'+n+'=([^;]*)');return m?decodeURIComponent(m[1]):null;},set(n,v,d=365){document.cookie=n+'='+encodeURIComponent(v)+';path=/;max-age='+(d*86400)+';SameSite=Lax';}};
+const LANG=document.documentElement.lang||'en';
+const MSG={added:{zh:'已添加',ja:'追加しました',en:'Added'},exists:{zh:'已在自选',ja:'すでに追加済み',en:'Already in list'},hidden:{zh:'已隐藏',ja:'非表示にしました',en:'Hidden'},shown:{zh:'已显示',ja:'表示しました',en:'Shown'},removed:{zh:'已删除',ja:'削除しました',en:'Removed'},boards:{zh:'主题已更新',ja:'テーマを更新',en:'Topics updated'}};
+const T=(k,v)=>((MSG[k]&&(MSG[k][LANG]||MSG[k].en))||k)+(v?' '+v:'');
+function toast(msg){const box=$('[data-toast]');if(!box)return;const el=document.createElement('div');el.className='pointer-events-auto rounded-lg border bg-popover text-popover-foreground px-3.5 py-2 text-sm shadow-md animate-in';el.textContent=msg;box.appendChild(el);setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),350);},2400);}
 
 /* ---------- theme ---------- */
 const theme=$('[data-theme]');
@@ -15,29 +19,35 @@ function filterEvents(){const query=search?.value.toLowerCase()||'';let shown=0;
 search?.addEventListener('input',filterEvents);
 
 /* ---------- signal boards: reorder + hide/show (cookie) ---------- */
-const BLS='radar-boards';let boardEdit=false;let dragBoard=null;
+const BLS='radar-boards';let boardEdit=false;let dragBoard=null;let dragChip=null;
 function loadBoards(){try{const a=JSON.parse(cookie.get(BLS)||'null');if(Array.isArray(a)&&a.length)return a;}catch{}return null;}
 let boardLayout=loadBoards();const hiddenBoards=new Set();
 if(boardLayout)for(const e of boardLayout)if(e.hidden)hiddenBoards.add(e.id);
-function applyBoards(){const wrap=$('[data-boards]');if(!wrap)return;const sections=$$('[data-board-section]',wrap);const byId=new Map(sections.map(s=>[s.dataset.boardSection,s]));
-  const order=[];if(boardLayout)for(const e of boardLayout)if(byId.has(e.id))order.push(e.id);for(const s of sections)if(!order.includes(s.dataset.boardSection))order.push(s.dataset.boardSection);
-  order.forEach(id=>wrap.appendChild(byId.get(id)));
-  for(const s of sections){const id=s.dataset.boardSection;const hid=hiddenBoards.has(id);s.hidden=!boardEdit&&hid;s.classList.toggle('opacity-50',boardEdit&&hid);
-    s.querySelector('[data-board-handle]')?.classList.toggle('hidden',!boardEdit);const b=s.querySelector('[data-board-hide]');if(b){b.classList.toggle('hidden',!boardEdit);b.textContent=hid?'◉':'◌';}}
-  wireBoardDrag();filterEvents();}
-function saveBoards(){const wrap=$('[data-boards]');if(!wrap)return;boardLayout=$$('[data-board-section]',wrap).map(s=>({id:s.dataset.boardSection,hidden:hiddenBoards.has(s.dataset.boardSection)}));cookie.set(BLS,JSON.stringify(boardLayout));}
-function wireBoardDrag(){const wrap=$('[data-boards]');if(!wrap)return;$$('[data-board-section]',wrap).forEach(s=>{
-  s.setAttribute('draggable',boardEdit?'true':'false');
-  if(!boardEdit)return;
+function boardOrder(){const chips=$('[data-board-chips]');const ids=($('[data-board-chips]')?$$('[data-chip]'):$$('[data-board-section]')).map(c=>c.dataset.chip||c.dataset.boardSection);const order=[];if(boardLayout)for(const e of boardLayout)if(ids.includes(e.id))order.push(e.id);for(const id of ids)if(!order.includes(id))order.push(id);return order;}
+function applyBoards(){const wrap=$('[data-boards]');if(!wrap)return;const order=boardOrder();
+  order.forEach(id=>{const s=wrap.querySelector(`[data-board-section="${id}"]`);if(s)wrap.appendChild(s);});
+  const chips=$('[data-board-chips]');const row=chips?.querySelector('.rounded-lg');
+  if(row)order.forEach(id=>{const c=row.querySelector(`[data-chip="${id}"]`);if(c)row.appendChild(c);});
+  $$('[data-chip]').forEach(c=>c.classList.toggle('opacity-50',hiddenBoards.has(c.dataset.chip)));
+  $$('[data-board-section]',wrap).forEach(s=>{const id=s.dataset.boardSection;const hid=hiddenBoards.has(id);s.hidden=!boardEdit&&hid;s.classList.toggle('opacity-50',boardEdit&&hid);s.querySelector('[data-board-handle]')?.classList.toggle('hidden',!boardEdit);const b=s.querySelector('[data-board-hide]');if(b){b.classList.toggle('hidden',!boardEdit);b.textContent=hid?'◉':'◌';}});
+  wireBoardDrag();wireChipDrag();filterEvents();}
+function saveBoards(){boardLayout=boardOrder().map(id=>({id,hidden:hiddenBoards.has(id)}));cookie.set(BLS,JSON.stringify(boardLayout));}
+function wireBoardDrag(){const wrap=$('[data-boards]');if(!wrap)return;$$('[data-board-section]',wrap).forEach(s=>{s.setAttribute('draggable',boardEdit?'true':'false');if(!boardEdit)return;
   s.addEventListener('dragstart',()=>{dragBoard=s.dataset.boardSection;s.classList.add('dragging');});
   s.addEventListener('dragend',()=>{s.classList.remove('dragging');$$('.drop-target').forEach(x=>x.classList.remove('drop-target'));});
   s.addEventListener('dragover',e=>{e.preventDefault();s.classList.add('drop-target');});
   s.addEventListener('dragleave',()=>s.classList.remove('drop-target'));
   s.addEventListener('drop',e=>{e.preventDefault();s.classList.remove('drop-target');if(!dragBoard||dragBoard===s.dataset.boardSection)return;const from=wrap.querySelector(`[data-board-section="${dragBoard}"]`);if(from)wrap.insertBefore(from,s);saveBoards();applyBoards();});
-  s.querySelector('[data-board-hide]')?.addEventListener('click',e=>{e.preventDefault();const id=s.dataset.boardSection;hiddenBoards.has(id)?hiddenBoards.delete(id):hiddenBoards.add(id);saveBoards();applyBoards();});
-});}
+  s.querySelector('[data-board-hide]')?.addEventListener('click',e=>{e.preventDefault();const id=s.dataset.boardSection;hiddenBoards.has(id)?hiddenBoards.delete(id):hiddenBoards.add(id);toast(T('boards'));saveBoards();applyBoards();});});}
+function wireChipDrag(){const chips=$('[data-board-chips]');if(!chips)return;const row=chips.querySelector('.rounded-lg');$$('[data-chip]',chips).forEach(c=>{c.setAttribute('draggable',boardEdit?'true':'false');if(!boardEdit)return;
+  c.addEventListener('dragstart',e=>{dragChip=c.dataset.chip;c.classList.add('dragging');e.dataTransfer.effectAllowed='move';});
+  c.addEventListener('dragend',()=>{c.classList.remove('dragging');$$('.drop-target').forEach(x=>x.classList.remove('drop-target'));});
+  c.addEventListener('dragover',e=>{e.preventDefault();c.classList.add('drop-target');});
+  c.addEventListener('dragleave',()=>c.classList.remove('drop-target'));
+  c.addEventListener('drop',e=>{e.preventDefault();c.classList.remove('drop-target');if(!dragChip||dragChip===c.dataset.chip)return;const from=row.querySelector(`[data-chip="${dragChip}"]`);if(from)row.insertBefore(from,c);saveBoards();applyBoards();});
+  c.addEventListener('click',e=>{e.preventDefault();const id=c.dataset.chip;hiddenBoards.has(id)?hiddenBoards.delete(id):hiddenBoards.add(id);toast(T('boards'));saveBoards();applyBoards();});});}
 const bEdit=$('[data-boards-edit]');const bDone=$('[data-boards-done]');
-function setBoardEdit(on){boardEdit=on;bEdit?.classList.toggle('hidden',on);bDone?.classList.toggle('hidden',!on);applyBoards();}
+function setBoardEdit(on){boardEdit=on;bEdit?.classList.toggle('hidden',on);bDone?.classList.toggle('hidden',!on);$('[data-board-chips]')?.classList.toggle('hidden',!on);applyBoards();}
 bEdit?.addEventListener('click',()=>setBoardEdit(true));
 bDone?.addEventListener('click',()=>setBoardEdit(false));
 applyBoards();
@@ -62,12 +72,12 @@ function render(map,updatedAt){const el=$('[data-markets]');if(!el)return;const 
 
 async function refresh(){const syms=layout.map(x=>x.symbol);if(!syms.length){render(new Map(),null);return;}try{const r=await fetch('/api/markets?symbols='+encodeURIComponent(syms.join(',')),{cache:'no-store'});if(!r.ok)return;const d=await r.json();render(new Map((d.items||[]).map(q=>[q.symbol,q])),d.updatedAt);}catch{}}
 
-function addSymbol(sym){sym=norm(sym);if(!sym)return;const ex=layout.find(x=>x.symbol===sym);if(ex){ex.hidden=false;}else{layout.push({symbol:sym,hidden:false});}highlight=sym;saveLayout();refresh();}
+function addSymbol(sym){sym=norm(sym);if(!sym)return;const ex=layout.find(x=>x.symbol===sym);if(ex){ex.hidden=false;toast(T('exists',sym));}else{layout.push({symbol:sym,hidden:false});toast(T('added',sym));}highlight=sym;saveLayout();refresh();}
 
 function wireTiles(){$$('[data-markets] [data-symbol]').forEach(el=>{
   el.addEventListener('click',e=>{const h=e.target.closest('[data-hide]');const d=e.target.closest('[data-del]');
-    if(h){const it=layout.find(x=>x.symbol===h.dataset.hide);if(it){it.hidden=!it.hidden;saveLayout();}refresh();return;}
-    if(d){layout=layout.filter(x=>x.symbol!==d.dataset.del);saveLayout();refresh();return;}});
+    if(h){const it=layout.find(x=>x.symbol===h.dataset.hide);if(it){it.hidden=!it.hidden;toast(T(it.hidden?'hidden':'shown',it.symbol));saveLayout();}refresh();return;}
+    if(d){layout=layout.filter(x=>x.symbol!==d.dataset.del);toast(T('removed',d.dataset.del));saveLayout();refresh();return;}});
   if(!edit)return;
   el.addEventListener('dragstart',e=>{dragSym=el.dataset.symbol;el.classList.add('dragging');e.dataTransfer.effectAllowed='move';});
   el.addEventListener('dragend',()=>{el.classList.remove('dragging');$$('.drop-target').forEach(x=>x.classList.remove('drop-target'));});

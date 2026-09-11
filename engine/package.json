@@ -19,7 +19,8 @@
     "digest:send": "node scripts/daily-digest.mjs --send",
     "publish": "node scripts/publish-public.mjs",
     "publish:push": "node scripts/publish-public.mjs --push",
-    "daily": "node scripts/radar.mjs"
+    "daily": "node scripts/radar.mjs",
+    "watchlist": "node scripts/set-watchlist.mjs"
   },
   "keywords": [
     "osint",

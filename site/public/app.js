@@ -3,7 +3,7 @@ const $$=(s,r=document)=>[...r.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const cookie={get(n){const m=document.cookie.match('(?:^|; )'+n+'=([^;]*)');return m?decodeURIComponent(m[1]):null;},set(n,v,d=365){document.cookie=n+'='+encodeURIComponent(v)+';path=/;max-age='+(d*86400)+';SameSite=Lax';}};
 const LANG=document.documentElement.lang||'en';
-const MSG={added:{zh:'已添加',ja:'追加しました',en:'Added'},exists:{zh:'已在自选',ja:'すでに追加済み',en:'Already in list'},hidden:{zh:'已隐藏',ja:'非表示にしました',en:'Hidden'},shown:{zh:'已显示',ja:'表示しました',en:'Shown'},removed:{zh:'已删除',ja:'削除しました',en:'Removed'},boards:{zh:'主题已更新',ja:'テーマを更新',en:'Topics updated'}};
+const MSG={added:{zh:'已添加',ja:'追加しました',en:'Added'},exists:{zh:'已在自选',ja:'すでに追加済み',en:'Already in list'},hidden:{zh:'已隐藏',ja:'非表示にしました',en:'Hidden'},shown:{zh:'已显示',ja:'表示しました',en:'Shown'},removed:{zh:'已删除',ja:'削除しました',en:'Removed'},boards:{zh:'主题已更新',ja:'テーマを更新',en:'Topics updated'},waiting:{zh:'等待 /start…',ja:'/start を待っています…',en:'Waiting for /start…'},linked:{zh:'✅ 已连接 · 每天',ja:'✅ 接続済み · 毎日',en:'✅ Linked · daily'}};
 const T=(k,v)=>((MSG[k]&&(MSG[k][LANG]||MSG[k].en))||k)+(v?' '+v:'');
 function toast(msg){const box=$('[data-toast]');if(!box)return;const el=document.createElement('div');el.className='pointer-events-auto rounded-lg border bg-popover text-popover-foreground px-3.5 py-2 text-sm shadow-md animate-in';el.textContent=msg;box.appendChild(el);setTimeout(()=>{el.style.transition='opacity .3s';el.style.opacity='0';setTimeout(()=>el.remove(),350);},2400);}
 
@@ -105,3 +105,16 @@ document.addEventListener('click',e=>{if(!e.target.closest('[data-markets-search
 refresh();setInterval(()=>{if(!document.hidden)refresh();},12000);
 document.addEventListener('visibilitychange',()=>{if(!document.hidden)refresh();});
 window.addEventListener('focus',refresh);
+
+/* ---------- Telegram subscribe form ---------- */
+const subForm=$('[data-sub-form]');
+if(subForm){
+  const out=$('[data-sub-out]');const go=$('[data-sub-go]');
+  subForm.addEventListener('submit',async e=>{e.preventDefault();go.disabled=true;out.innerHTML='<p class="text-muted-foreground">…</p>';
+    const boards=$$('[data-sub-board]:checked').map(function(x){return x.value});
+    try{const r=await fetch('/api/subscribe',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({token:$('[data-sub-token]').value.trim(),lang:$('[data-sub-lang]').value,hour:Number($('[data-sub-hour]').value),boards:boards})});const d=await r.json();
+      if(!d.ok){out.innerHTML='<div class="rounded-md border border-destructive/40 bg-destructive/10 p-3 text-xs text-destructive">'+esc(d.reason||'failed')+(d.detail?' — '+esc(d.detail):'')+'</div>';go.disabled=false;return;}
+      out.innerHTML='<div class="rounded-md border p-3 text-xs space-y-2"><p>@'+esc(d.botUsername)+' &nbsp;<code>/start '+esc(d.pairCode)+'</code></p><a class="btn btn-outline btn-sm" target="_blank" rel="noopener" href="https://t.me/'+esc(d.botUsername)+'">'+esc('@'+d.botUsername)+'</a><p data-sub-st class="text-muted-foreground">'+T('waiting')+'</p></div>';
+      (function poll(){fetch('/api/subscribe/'+d.secret).then(r=>r.json()).then(s=>{const st=$('[data-sub-st]');if(s&&s.linked){if(st)st.textContent=T('linked',String(s.hour).padStart(2,'0')+':41 JST');}else setTimeout(poll,3000);}).catch(()=>setTimeout(poll,5000));})();
+    }catch(err){out.innerHTML='<div class="rounded-md border p-3 text-xs text-destructive">network error</div>';go.disabled=false;}});
+}

@@ -24,12 +24,15 @@ const pick = (lang) => (LABEL[lang] || LABEL.zh);
 export function buildMarkdown(s, lang = 'zh') {
   const L = pick(lang), t = T[lang] || T.zh;
   const out = [`**${t.title} · ${jst(s.generatedAt)}**`, '', cut(s.digest?.[lang], 500), ''];
+  const PER = 15;
   for (const b of BOARDS) {
     const items = (s.events || []).filter(e => e.category === b);
+    const shown = items.slice(0, PER);
     out.push(`<details><summary>${EMOJI[b]} ${L[b]}（${items.length} 条）</summary>`, '');
     out.push('| 标题 | 内容 | 链接 |', '| --- | --- | --- |');
-    if (items.length) for (const e of items) out.push(`| ${cut(e.title?.[lang], 40)} | ${cut(e.summary?.[lang] || e.action?.[lang], 90)} | [链接](${e.url}) |`);
+    if (shown.length) for (const e of shown) out.push(`| ${cut(e.title?.[lang], 40)} | ${cut(e.summary?.[lang] || e.action?.[lang], 90)} | [链接](${e.url}) |`);
     else out.push(`| ${t.none} | — | — |`);
+    if (items.length > shown.length) out.push(`| … | 另有 ${items.length - shown.length} 条 | [更多](https://radar.antist.ai/${lang}/c/${b}) |`);
     out.push('', '</details>', '');
   }
   const fs = s.forecasts || [];

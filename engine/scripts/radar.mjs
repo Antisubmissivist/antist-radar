@@ -26,7 +26,9 @@ for(const a of (s.GDELT?.allArticles||[]).slice(0,5))add('GDELT','geopolitics',a
 for(const a of (s['CISA-KEV']?.vulnerabilities||[]).slice(0,5))add('CISA-KEV','japan-life',`${a.cveID}: ${a.vulnerabilityName}`,`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,`${a.vendorProject} ${a.product}. ${a.shortDescription||''}. ${a.requiredAction||''}. Federal remediation due date is not a deadline applying to every reader.`,null,a.cveID);
 const unique=[...new Map(raw.map(x=>[x.id,x])).values()];
 const previous=await load('runs/decision-state.json',{});const delta=changes(unique,previous);
-const analysis=await analyseRadar(delta.events.filter(e=>eligibility(e)!=='ineligible'),markets);
+// 10-day window: keep the candidate pool bounded so scoring stays fast.
+const cutoff=Date.now()-10*86400000;
+const analysis=await analyseRadar(delta.events.filter(e=>eligibility(e)!=='ineligible'&&Date.parse(e.publishedAt||e.fetchedAt||0)>=cutoff),markets);
 const known={YFinance:'https://finance.yahoo.com/',AIInfra:'https://news.ycombinator.com/',Japan:'https://www.jma.go.jp/',FX:'https://www.frankfurter.app/',GDELT:'https://www.gdeltproject.org/','CISA-KEV':'https://www.cisa.gov/known-exploited-vulnerabilities-catalog'};
 const health=sweep.health;const sources=Object.keys(sweep.timing||{}).filter(n=>n!=='Positions').map(name=>({name,url:known[name]||'https://github.com/calesthio/Crucix',fetchedAt:sweep.crucix.timestamp,status:health.ok.includes(name)?'ok':health.dead.some(x=>x.name===name)?'unavailable':'degraded',count:0}));
 sources.push(...feeds.map(f=>({name:f.name,url:f.url,fetchedAt:f.fetchedAt,status:f.status,count:f.items.length})));

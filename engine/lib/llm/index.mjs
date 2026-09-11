@@ -9,6 +9,7 @@ import { MiniMaxProvider } from "./minimax.mjs";
 import { MistralProvider } from "./mistral.mjs";
 import { OllamaProvider } from "./ollama.mjs";
 import { GrokProvider } from "./grok.mjs";
+import { OpenCodeProvider } from "./opencode.mjs";
 import { WorkersAIProvider } from './workers-ai.mjs';
 
 export { LLMProvider } from "./provider.mjs";
@@ -21,6 +22,7 @@ export { MiniMaxProvider } from "./minimax.mjs";
 export { MistralProvider } from "./mistral.mjs";
 export { OllamaProvider } from "./ollama.mjs";
 export { GrokProvider } from "./grok.mjs";
+export { OpenCodeProvider } from "./opencode.mjs";
 
 /**
  * Create an LLM provider based on config.
@@ -53,6 +55,8 @@ export function createLLMProvider(llmConfig) {
       return new OllamaProvider({ model, baseUrl: llmConfig.baseUrl });
     case 'grok':
       return new GrokProvider({ apiKey, model });
+    case 'opencode':
+      return new OpenCodeProvider({ apiKey, model });
     default:
       console.warn(
         `[LLM] Unknown provider "${provider}". LLM features disabled.`,

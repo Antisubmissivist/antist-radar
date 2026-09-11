@@ -118,3 +118,37 @@ if(subForm){
       (function poll(){fetch('/api/subscribe/'+d.secret).then(r=>r.json()).then(s=>{const st=$('[data-sub-st]');if(s&&s.linked){if(st)st.textContent=T('linked',String(s.hour).padStart(2,'0')+':41 JST');}else setTimeout(poll,3000);}).catch(()=>setTimeout(poll,5000));})();
     }catch(err){out.innerHTML='<div class="rounded-md border p-3 text-xs text-destructive">network error</div>';go.disabled=false;}});
 }
+
+/* ---------- read aloud (Web Speech API — free, on-device, ja/en/zh) ---------- */
+(function(){
+  const btns=$$('[data-speak]');
+  if(!btns.length||!('speechSynthesis' in window))return;
+  const bcp=LANG==='ja'?'ja-JP':LANG==='zh'?'zh-CN':LANG==='en'?'en-US':LANG;
+  const sep=LANG==='en'?'. ':'。';
+  const STOP={en:'Stop',ja:'停止',zh:'停止'};
+  const NONE={en:'Nothing to read',ja:'読み上げる内容がありません',zh:'暂无可朗读内容'};
+  let idx=0,queue=[];
+  const clean=s=>String(s).replace(/[↗→←·•|]/g,' ').replace(/\s+/g,' ').trim();
+  function pickVoice(){const vs=window.speechSynthesis.getVoices()||[];const b=LANG;return vs.find(v=>v.lang&&v.lang.toLowerCase().startsWith(b))||vs.find(v=>v.lang&&v.lang.toLowerCase().startsWith(bcp.slice(0,2)))||null;}
+  function parts(card,t){const out=[clean(t.textContent)];const s=card.querySelector('[data-tts-summary]');if(s)out.push(clean(s.textContent));const r=card.querySelector('[data-tts-review]');if(r)out.push(clean(r.textContent));return out.filter(Boolean);}
+  function reset(){window.speechSynthesis.cancel();btns.forEach(b=>{b.textContent=b.dataset.label;});}
+  function next(){
+    if(idx>=queue.length)return reset();
+    const u=new SpeechSynthesisUtterance(queue[idx]);const v=pickVoice();if(v)u.voice=v;
+    u.lang=bcp;u.rate=1;u.pitch=1;u.onend=()=>{idx++;next();};u.onerror=()=>{idx++;next();};
+    window.speechSynthesis.speak(u);
+  }
+  function start(){
+    const seen=new Set();queue=[];
+    $$('[data-tts-title]').forEach(t=>{
+      const card=t.closest('.card')||t.parentElement;if(!card||seen.has(card))return;seen.add(card);
+      const p=parts(card,t);if(p.length)queue.push(p.join(sep));
+    });
+    if(!queue.length){toast(NONE[LANG]||NONE.en);return;}
+    idx=0;btns.forEach(b=>{b.textContent='⏹ '+(STOP[LANG]||STOP.en);});
+    window.speechSynthesis.cancel();next();
+  }
+  btns.forEach(b=>{b.dataset.label=b.textContent;b.setAttribute('aria-pressed','false');
+    b.addEventListener('click',()=>{const on=window.speechSynthesis.speaking&&!window.speechSynthesis.paused;b.setAttribute('aria-pressed',String(!on));on?reset():start();});});
+  window.addEventListener('beforeunload',()=>window.speechSynthesis.cancel());
+})();

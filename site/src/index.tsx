@@ -91,13 +91,16 @@ const st=await c.env.DB.prepare('SELECT v FROM tg_state WHERE k=?').bind('last_u
 if(uid&&Number(st?.v||0)>=uid)return c.json({ok:true});
 if(uid)await c.env.DB.prepare('INSERT INTO tg_state (k,v) VALUES (?,?) ON CONFLICT(k) DO UPDATE SET v=excluded.v').bind('last_update_id',String(uid)).run();
 if(isPublic&&(chatType==='group'||chatType==='supergroup')){
-  // In a group the bot only reacts when addressed (@Antist_monitor_bot). It then
-  // pins the daily digest to that exact topic (chat_id + message_thread_id).
-  if(!text.toLowerCase().includes('@antist_monitor_bot'))return c.json({ok:true});
+  // In a group the bot reacts when addressed (@Antist_monitor_bot) or on a known
+  // command. It then pins the daily digest to that exact topic (chat_id + thread_id).
+  const KNOWN=['/start','/help','/brief','/time','/topics','/stop','/delete'];
+  if(!text.toLowerCase().includes('@antist_monitor_bot')&&!KNOWN.includes(cmd))return c.json({ok:true});
   let g=await c.env.DB.prepare('SELECT * FROM subscribers WHERE chat_id=? AND IFNULL(thread_id,\'\')=?').bind(chatId,threadId).first() as Record<string,any>|null;
   if(!g){const id=crypto.randomUUID();await c.env.DB.prepare('INSERT INTO subscribers (id,secret,token,bot_username,chat_id,thread_id,chat_title,owner_user_id,lang,hour,boards,active,created_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,1,?)').bind(id,newSecret(),'Antist_monitor_bot','Antist_monitor_bot',chatId,threadId,chatTitle,fromId,'zh',8,'[]',new Date().toISOString()).run();g=await c.env.DB.prepare('SELECT * FROM subscribers WHERE id=?').bind(id).first() as Record<string,any>;}
   const extra=threadId?{message_thread_id:Number(threadId)}:{};
-  if(cmd==='/time'){const h=Number(arg);if(Number.isInteger(h)&&h>=0&&h<=23){await c.env.DB.prepare('UPDATE subscribers SET hour=? WHERE id=?').bind(h,g.id).run();await tgApi(token,'sendMessage',{chat_id:chatId,...extra,text:'\u23f0 每天约 '+h+':41 JST 在此话题推送'});}else await tgApi(token,'sendMessage',{chat_id:chatId,...extra,text:'用法: /time 8'});}
+  if(cmd==='/brief'){await sendSubscriber(c.env,{...g,chat_id:chatId,token},new Date(Date.now()+9*3600000).toISOString().slice(0,10));}
+  else if(cmd==='/start'||cmd==='/help'){await tgApi(token,'sendRichMessage',{chat_id:chatId,...extra,rich_message:{markdown:subHelp(g,cmd==='/start')}});}
+  else if(cmd==='/time'){const h=Number(arg);if(Number.isInteger(h)&&h>=0&&h<=23){await c.env.DB.prepare('UPDATE subscribers SET hour=? WHERE id=?').bind(h,g.id).run();await tgApi(token,'sendMessage',{chat_id:chatId,...extra,text:'\u23f0 每天约 '+h+':41 JST 在此话题推送'});}else await tgApi(token,'sendMessage',{chat_id:chatId,...extra,text:'用法: /time 8'});}
   else if(cmd==='/topics'){const nb=normBoards(text.split(/\s+/).slice(1).join(',').split(',').map(s=>s.trim()).filter(Boolean));if(nb.length){await c.env.DB.prepare('UPDATE subscribers SET boards=? WHERE id=?').bind(JSON.stringify(nb),g.id).run();await tgApi(token,'sendMessage',{chat_id:chatId,...extra,text:'\u2705 '+nb.join(', ')});}else await tgApi(token,'sendRichMessage',{chat_id:chatId,...extra,rich_message:{markdown:'可选主题：'+subTopics()}});}
   else if(cmd==='/stop'){await c.env.DB.prepare('UPDATE subscribers SET active=0 WHERE id=?').bind(g.id).run();await tgApi(token,'sendMessage',{chat_id:chatId,...extra,text:'已暂停 · 再次 @我 即可恢复'});}
   else if(cmd==='/delete'){await c.env.DB.prepare('DELETE FROM subscribers WHERE id=?').bind(g.id).run();await tgApi(token,'sendMessage',{chat_id:chatId,...extra,text:'已删除。'});}

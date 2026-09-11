@@ -38,7 +38,7 @@ async function releases() {
   for(const repo of repos) {
     const rows=await request(`https://api.github.com/repos/${repo}/releases?per_page=4`,'json',process.env.GH_READ_TOKEN?{Authorization:`Bearer ${process.env.GH_READ_TOKEN}`} : {});
     if(!Array.isArray(rows)) throw new Error('Releases schema changed');scanned+=rows.length;
-    items.push(...rows.filter(r=>!r.draft&&!r.prerelease).slice(0,2).map(r=>event('GitHub Releases','tools',{sourceId:`${repo}:${r.id}`,title:`${repo} ${r.tag_name}`,url:r.html_url,publishedAt:iso(r.published_at),evidence:plain(r.body).slice(0,1800)})));
+    items.push(...rows.filter(r=>!r.draft&&!r.prerelease).slice(0,2).map(r=>event('GitHub Releases','ai',{sourceId:`${repo}:${r.id}`,title:`${repo} ${r.tag_name}`,url:r.html_url,publishedAt:iso(r.published_at),evidence:plain(r.body).slice(0,1800)})));
   }return {items,scanned};
 }
 async function grants() {
@@ -47,14 +47,14 @@ async function grants() {
   if(!Array.isArray(data.result)) throw new Error('Grants schema changed');
   const items=await Promise.all(data.result.slice(0,6).map(async row=>{
     const detail=await request(`${endpoint}/id/${row.id}`,'json');const d=detail.result?.[0];if(!d)throw new Error('Missing grant detail');
-    return event('JGrants','opportunity',{sourceId:row.id,title:row.title,url:d.front_subsidy_detail_page_url,
+    return event('JGrants','japan-life',{sourceId:row.id,title:row.title,url:d.front_subsidy_detail_page_url,
       stage:Date.parse(row.acceptance_end_datetime)<Date.now()?'closed':'open',deadlineAt:iso(row.acceptance_end_datetime),
       evidence:plain(`${d.detail||''} Region: ${row.target_area_search||''}. Employees: ${row.target_number_of_employees||''}. Purpose: ${d.use_purpose||''}. Industry: ${d.industry||''}. Deadline: ${row.acceptance_end_datetime}.`).slice(0,1900),
       conditions:{region:String(row.target_area_search||'').split(' / ')},unknowns:'Business eligibility, expenses and required documents must be checked in the official application guidelines.'});
   }));return {items,scanned:data.result.length};
 }
 async function policies() {
-  const r=await feed('e-Gov','policy','https://public-comment.e-gov.go.jp/rss/pcm_list.xml','draft');
+  const r=await feed('e-Gov','japan-residence','https://public-comment.e-gov.go.jp/rss/pcm_list.xml','draft');
   // The official RSS identifies consultation, not an enacted rule.
   r.items=await Promise.all(r.items.slice(0,6).map(async e=>{
     const raw=await request(e.url);const $=cheerio.load(raw);$('script,style,header,footer,nav').remove();
@@ -93,20 +93,55 @@ async function jobs() {
   matched.sort((a,b)=>Number(/Japan|Tokyo/i.test(b.location?.name))-Number(/Japan|Tokyo/i.test(a.location?.name))||Date.parse(b.updated_at)-Date.parse(a.updated_at));
   return {scanned:d.jobs.length,items:matched.slice(0,4).map(j=>{
     const detail=plain(plain(j.content));const start=detail.search(/About the role|What you|Responsibilities|About the department|Location/i);
-    return event('Greenhouse · Cloudflare','opportunity',{sourceId:j.id,title:j.title,url:j.absolute_url,stage:'open',
+    return event('Greenhouse · Cloudflare','japan-life',{sourceId:j.id,title:j.title,url:j.absolute_url,stage:'open',
       evidence:`Employer: Cloudflare. Location: ${j.location?.name}. Updated: ${j.updated_at}. ${detail.slice(Math.max(0,start),Math.max(0,start)+1400)}`.replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g,'[official contact omitted]'),
       unknowns:'Selected employer only, not the whole job market. A remote label does not mean worldwide eligibility. Salary, work authorization and sponsorship require original-source verification.'});
   })};
 }
+async function clawfeed() {
+  const data=await request('https://clawfeed.kevinhe.io/api/digests?type=4h&limit=3','json');
+  if(!Array.isArray(data)) throw new Error('ClawFeed schema changed');
+  const items=[];let scanned=0;
+  for(const digest of data){
+    for(const line of String(digest.content||'').split('\n')){
+      const t=line.trim();
+      if(!t.startsWith('•')) continue;
+      const clean=t.replace(/^[•·*\-]\s*/,'').replace(/\s+/g,' ').trim();
+      if(clean.length<20) continue;scanned++;
+      if(items.length>=12) continue;
+      // ClawFeed curates Twitter/X, HN and RSS; key on content so repeats de-duplicate.
+      items.push(event('ClawFeed','ai',{sourceId:`cf:${clean.slice(0,140)}`,title:clean.slice(0,200),url:'https://clawfeed.kevinhe.io/',publishedAt:null,evidence:clean.slice(0,1900)}));
+    }
+  }
+  return {items,scanned};
+}
+async function stocks() {
+  const tickers=['^GSPC','NVDA','7203.T'];
+  const items=[];let scanned=0;
+  for(const s of tickers){
+    const r=await feed('Yahoo Finance','stocks',`https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(s)}&region=US&lang=en-US`);
+    scanned+=r.scanned;items.push(...r.items.slice(0,3));
+  }
+  return {items,scanned};
+}
 export const FEEDS=[
   {name:'GitHub Releases',url:'https://docs.github.com/en/rest/releases/releases',collect:releases},
-  {name:'JVN',url:'https://jvn.jp/rss/',collect:()=>feed('JVN','security','https://jvn.jp/rss/jvn.rdf')},
+  {name:'ClawFeed',url:'https://clawfeed.kevinhe.io/',collect:clawfeed},
+  {name:'JVN',url:'https://jvn.jp/rss/',collect:()=>feed('JVN','japan-life','https://jvn.jp/rss/jvn.rdf')},
   {name:'e-Gov',url:'https://public-comment.e-gov.go.jp/',collect:policies},
   {name:'JGrants',url:'https://developers.digital.go.jp/documents/jgrants/api/',collect:grants},
   {name:'Greenhouse · Cloudflare',url:'https://www.cloudflare.com/careers/jobs/',collect:jobs},
-  {name:'JASSO',url:'https://www.jasso.go.jp/ryugaku/',collect:()=>notices('JASSO','opportunity','https://www.jasso.go.jp/ryugaku/',/\/(news\/|ryugaku\/.+\/event\/|ryugaku\/.+\/admission)/)},
-  {name:'Kokusen',url:'https://www.kokusen.go.jp/mimamori/mj_mglist.html',collect:()=>notices('Kokusen','living','https://www.kokusen.go.jp/mimamori/mj_mglist.html',/\/mj_mailmag\/mj-shinsen\d+\.html$/)},
-  {name:'Bank of Japan',url:'https://www.boj.or.jp/rss/whatsnew.xml',collect:()=>feed('Bank of Japan','policy','https://www.boj.or.jp/rss/whatsnew.xml')},
+  {name:'JASSO',url:'https://www.jasso.go.jp/ryugaku/',collect:()=>notices('JASSO','japan-life','https://www.jasso.go.jp/ryugaku/',/\/(news\/|ryugaku\/.+\/event\/|ryugaku\/.+\/admission)/)},
+  {name:'Kokusen',url:'https://www.kokusen.go.jp/mimamori/mj_mglist.html',collect:()=>notices('Kokusen','japan-life','https://www.kokusen.go.jp/mimamori/mj_mglist.html',/\/mj_mailmag\/mj-shinsen\d+\.html$/)},
+  {name:'Bank of Japan',url:'https://www.boj.or.jp/rss/whatsnew.xml',collect:()=>feed('Bank of Japan','stocks','https://www.boj.or.jp/rss/whatsnew.xml')},
+  {name:'Cointelegraph',url:'https://cointelegraph.com/rss',collect:()=>feed('Cointelegraph','crypto','https://cointelegraph.com/rss')},
+  {name:'Decrypt',url:'https://decrypt.co/feed',collect:()=>feed('Decrypt','crypto','https://decrypt.co/feed')},
+  {name:'CoinDesk',url:'https://www.coindesk.com/arc/outboundfeeds/rss/',collect:()=>feed('CoinDesk','crypto','https://www.coindesk.com/arc/outboundfeeds/rss/')},
+  {name:'MarketWatch',url:'https://feeds.content.dowjones.io/public/rss/mw_topstories',collect:()=>feed('MarketWatch','stocks','https://feeds.content.dowjones.io/public/rss/mw_topstories')},
+  {name:'Yahoo Finance',url:'https://feeds.finance.yahoo.com/rss/2.0/headline',collect:stocks},
+  {name:'BBC World',url:'https://feeds.bbci.co.uk/news/world/rss.xml',collect:()=>feed('BBC World','geopolitics','https://feeds.bbci.co.uk/news/world/rss.xml')},
+  {name:'Al Jazeera',url:'https://www.aljazeera.com/xml/rss/all.xml',collect:()=>feed('Al Jazeera','geopolitics','https://www.aljazeera.com/xml/rss/all.xml')},
+  {name:'DW World',url:'https://rss.dw.com/rdf/rss-en-world',collect:()=>feed('DW World','geopolitics','https://rss.dw.com/rdf/rss-en-world')},
 ];
 export async function collectFeeds() {
   return Promise.all(FEEDS.map(async f=>{

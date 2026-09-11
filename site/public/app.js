@@ -123,52 +123,57 @@ if(subForm){
 (function(){
   const btns=$$('[data-speak]');
   if(!btns.length||!('speechSynthesis' in window))return;
-  try{window.speechSynthesis.getVoices();window.speechSynthesis.onvoiceschanged=()=>window.speechSynthesis.getVoices();}catch(e){}
+  const synth=window.speechSynthesis;
   const bcp=LANG==='ja'?'ja-JP':LANG==='zh'?'zh-CN':LANG==='en'?'en-US':LANG;
   const sep=LANG==='en'?'. ':'。';
   const STOP={en:'Stop',ja:'停止',zh:'停止'};
   const NONE={en:'Nothing to read',ja:'読み上げる内容がありません',zh:'暂无可朗读内容'};
   // Prefer a male voice. The API has no gender field, so (1) match known male
-  // voice names, (2) else drop known female names, (3) else fall back to the
-  // default voice with a lowered pitch so it still sounds male.
-  const MALE={ja:['ichiro','otoya','takehiro','keita','naoki','male','男'],zh:['kangkang','yunyang','yunjian','yunxi','yunye','kunkun','male','男'],en:['david','mark','guy','daniel','alex','fred','george','james','male']};
-  const FEMALE={ja:['haruka','kyoko','nanami','ayumi','sayaka','female','女'],zh:['huihui','xiaoxiao','xiaoyi','yaoyao','ting','mei-jia','sin-ji','female','女'],en:['zira','susan','samantha','karen','moira','tessa','fiona','victoria','female']};
-  let idx=0,queue=[];
+  // voice names, (2) else drop known female names, (3) else lower pitch a lot.
+  const MALE={ja:['ichiro','otoya','takehiro','keita','naoki','kaito','male','男'],zh:['kangkang','yunyang','yunjian','yunxi','yunfeng','yunjie','yunye','kunkun','limu','li-mu','male','男'],en:['david','mark','guy','daniel','alex','fred','george','james','google uk english male','male']};
+  const FEMALE={ja:['haruka','kyoko','nanami','ayumi','sayaka','female','女'],zh:['huihui','xiaoxiao','xiaoyi','xiaobei','xiaoni','xiaohan','xiaoqiu','xiaozhen','xiaoxuan','xiaomeng','yaoyao','ting-ting','tingting','mei-jia','meijia','sin-ji','female','女'],en:['zira','susan','samantha','karen','moira','tessa','fiona','victoria','female']};
+  let queue=[],idx=0,active=false,gen=0;
   const clean=s=>String(s).replace(/[↗→←·•|]/g,' ').replace(/\s+/g,' ').trim();
   const has=(v,list)=>{const n=String(v.name||'').toLowerCase();return list.some(x=>n.includes(x));};
+  const voices=()=>{try{return synth.getVoices()||[];}catch(e){return [];}};
+  try{synth.getVoices();}catch(e){}
   function pickVoice(){
-    const vs=window.speechSynthesis.getVoices()||[];
-    const pre=bcp.slice(0,2).toLowerCase();
-    const pool=vs.filter(v=>v.lang&&v.lang.toLowerCase().startsWith(pre));
+    const pool=voices().filter(v=>v.lang&&v.lang.toLowerCase().startsWith(bcp.slice(0,2).toLowerCase()));
     if(!pool.length)return {voice:null,male:false};
-    const male=MALE[LANG]||MALE.en, female=FEMALE[LANG]||FEMALE.en;
-    const byLocal=(a,b)=>(b.localService?1:0)-(a.localService?1:0);
+    const exact=v=>String(v.lang||'').replace('_','-').toLowerCase()===bcp.toLowerCase();
+    const byLocal=(a,b)=>(exact(b)-exact(a))||((b.localService?1:0)-(a.localService?1:0));
+    const male=MALE[LANG]||MALE.en,female=FEMALE[LANG]||FEMALE.en;
     const known=pool.filter(v=>has(v,male)).sort(byLocal);
     if(known.length)return {voice:known[0],male:true};
     const neutral=pool.filter(v=>!has(v,female)).sort(byLocal);
     if(neutral.length)return {voice:neutral[0],male:true};
-    return {voice:pool.sort(byLocal)[0]||null,male:false};
+    return {voice:pool.slice().sort(byLocal)[0]||null,male:false};
   }
   function parts(card,t){const out=[clean(t.textContent)];const s=card.querySelector('[data-tts-summary]');if(s)out.push(clean(s.textContent));const r=card.querySelector('[data-tts-review]');if(r)out.push(clean(r.textContent));return out.filter(Boolean);}
-  function reset(){window.speechSynthesis.cancel();btns.forEach(b=>{b.textContent=b.dataset.label;});}
-  function next(){
-    if(idx>=queue.length)return reset();
-    const u=new SpeechSynthesisUtterance(queue[idx]);const sel=pickVoice();if(sel.voice)u.voice=sel.voice;
-    if(idx===0)console.log('[tts]',LANG,'picked:',sel.voice&&sel.voice.name,'maleKnown:',sel.male,'| available:',(window.speechSynthesis.getVoices()||[]).filter(v=>(v.lang||'').toLowerCase().startsWith(bcp.slice(0,2))).map(v=>v.name+'/'+v.lang).join(' ; '));
-    u.lang=bcp;u.rate=0.98;u.pitch=sel.male?1:0.7;u.onend=()=>{idx++;next();};u.onerror=()=>{idx++;next();};
-    window.speechSynthesis.speak(u);
+  function label(){btns.forEach(b=>{b.textContent=b.dataset.label;b.setAttribute('aria-pressed','false');});}
+  function stop(){active=false;gen++;try{synth.cancel();}catch(e){}label();}
+  function speak(g){
+    if(!active||g!==gen)return;
+    if(idx>=queue.length){active=false;return label();}
+    const sel=pickVoice();const u=new SpeechSynthesisUtterance(queue[idx]);
+    if(sel.voice)u.voice=sel.voice;
+    u.lang=bcp;u.rate=sel.male?0.98:0.95;u.pitch=sel.male?1:0.55;
+    if(idx===0)console.log('[tts]',LANG,'picked:',sel.voice&&sel.voice.name,'maleKnown:',sel.male,'pitch:',u.pitch,'| available:',voices().filter(v=>(v.lang||'').toLowerCase().startsWith(bcp.slice(0,2).toLowerCase())).map(v=>v.name+'/'+v.lang).join(' ; '));
+    const adv=()=>{if(active&&g===gen){idx++;setTimeout(()=>speak(g),60);}};
+    u.onend=adv;u.onerror=adv;
+    try{synth.resume();synth.speak(u);}catch(e){adv();}
   }
   function start(){
     const seen=new Set();queue=[];
-    $$('[data-tts-title]').forEach(t=>{
-      const card=t.closest('.card')||t.parentElement;if(!card||seen.has(card))return;seen.add(card);
-      const p=parts(card,t);if(p.length)queue.push(p.join(sep));
-    });
+    $$('[data-tts-title]').forEach(t=>{const card=t.closest('.card')||t.parentElement;if(!card||seen.has(card))return;seen.add(card);const p=parts(card,t);if(p.length)queue.push(p.join(sep));});
     if(!queue.length){toast(NONE[LANG]||NONE.en);return;}
-    idx=0;btns.forEach(b=>{b.textContent='⏹ '+(STOP[LANG]||STOP.en);});
-    window.speechSynthesis.cancel();next();
+    try{synth.cancel();}catch(e){}
+    idx=0;active=true;gen++;const g=gen;
+    btns.forEach(b=>{b.textContent='⏹ '+(STOP[LANG]||STOP.en);b.setAttribute('aria-pressed','true');});
+    if(voices().length)speak(g);
+    else{let fired=false;const onv=()=>{if(fired||g!==gen)return;fired=true;speak(g);};try{synth.addEventListener('voiceschanged',onv);}catch(e){}setTimeout(onv,700);}
   }
   btns.forEach(b=>{b.dataset.label=b.textContent;b.setAttribute('aria-pressed','false');
-    b.addEventListener('click',()=>{const on=window.speechSynthesis.speaking&&!window.speechSynthesis.paused;b.setAttribute('aria-pressed',String(!on));on?reset():start();});});
-  window.addEventListener('beforeunload',()=>window.speechSynthesis.cancel());
+    b.addEventListener('click',()=>{active?stop():start();});});
+  window.addEventListener('beforeunload',()=>{try{synth.cancel();}catch(e){}});
 })();

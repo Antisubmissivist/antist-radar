@@ -114,12 +114,15 @@
 
   .tab { @apply inline-flex items-center justify-center whitespace-nowrap rounded-md px-3 py-1.5 text-sm font-medium text-muted-foreground transition-all hover:text-foreground; }
   .tab-active { @apply bg-background text-foreground shadow-sm; }
+  .navlink { @apply inline-flex h-9 items-center rounded-md px-3 text-sm font-medium text-muted-foreground transition-colors hover:bg-accent hover:text-accent-foreground; }
 
   .separator { @apply h-px w-full bg-border; }
 
   .market-tile { @apply relative flex flex-col gap-1 rounded-lg border bg-card p-3 transition-all hover:shadow-md; }
   .market-tile.dragging { @apply opacity-50 ring-2 ring-ring; }
   .market-tile.drop-target { @apply ring-2 ring-primary; }
+  .dragging { @apply opacity-50; }
+  .drop-target { @apply rounded-lg ring-2 ring-ring; }
 }
 
 @keyframes fade-in-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }

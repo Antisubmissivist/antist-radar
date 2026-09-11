@@ -1,5 +1,6 @@
 // Live market strip: cached Yahoo quotes for a configurable watchlist.
-// The watchlist lives in KV (radar:watchlist) and defaults to the set below.
+// The watchlist lives in KV (radar:watchlist); callers may override per request
+// with an explicit symbol list so readers can add any ticker client-side.
 
 type MarketsEnv = { MONITOR: KVNamespace };
 
@@ -17,6 +18,9 @@ export const DEFAULT_WATCHLIST: WatchItem[] = [
   { symbol: '^VIX', name: 'VIX' },
 ];
 
+const CACHE_MS = 10000;
+const SYMBOL_RE = /^[A-Za-z0-9.^=_-]{1,24}$/;
+
 export async function getWatchlist(env: MarketsEnv): Promise<WatchItem[]> {
   const raw = await env.MONITOR.get('radar:watchlist');
   if (raw) {
@@ -27,7 +31,6 @@ export async function getWatchlist(env: MarketsEnv): Promise<WatchItem[]> {
 
 export async function setWatchlist(env: MarketsEnv, list: WatchItem[]) {
   await env.MONITOR.put('radar:watchlist', JSON.stringify(list));
-  await env.MONITOR.delete('markets:cache');
 }
 
 async function quote(item: WatchItem): Promise<MarketQuote | null> {
@@ -53,17 +56,22 @@ async function quote(item: WatchItem): Promise<MarketQuote | null> {
   } catch { return null; }
 }
 
-export async function getMarkets(env: MarketsEnv): Promise<{ updatedAt: string; items: MarketQuote[] }> {
-  const cached = await env.MONITOR.get('markets:cache');
+export async function getMarkets(env: MarketsEnv, override?: string[]): Promise<{ updatedAt: string; items: MarketQuote[] }> {
+  const list: WatchItem[] = (override && override.length)
+    ? override.filter(s => SYMBOL_RE.test(s)).slice(0, 30).map(s => ({ symbol: s, name: '' }))
+    : await getWatchlist(env);
+  if (!list.length) return { updatedAt: new Date().toISOString(), items: [] };
+
+  const cacheKey = 'markets:cache:' + list.map(x => x.symbol).join('|');
+  const cached = await env.MONITOR.get(cacheKey);
   if (cached) {
     try {
       const c = JSON.parse(cached);
-      if (Date.now() - Date.parse(c.updatedAt) < 30000 && Array.isArray(c.items) && c.items.length) return c;
+      if (Date.now() - Date.parse(c.updatedAt) < CACHE_MS && Array.isArray(c.items) && c.items.length) return c;
     } catch { /* refresh below */ }
   }
-  const list = await getWatchlist(env);
   const items = (await Promise.all(list.map(quote))).filter((x): x is MarketQuote => x !== null);
   const out = { updatedAt: new Date().toISOString(), items };
-  if (items.length) await env.MONITOR.put('markets:cache', JSON.stringify(out), { expirationTtl: 120 });
+  if (items.length) await env.MONITOR.put(cacheKey, JSON.stringify(out), { expirationTtl: 60 });
   return out;
 }

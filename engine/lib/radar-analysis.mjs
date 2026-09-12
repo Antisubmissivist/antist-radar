@@ -9,8 +9,14 @@ const parseJson=t=>{const f=String(t||'').replace(/^```(?:json)?\s*|\s*```$/g,''
 
 function extractScoredItems(text){
   try{const j=parseJson(text);if(j&&Array.isArray(j.items))return j.items;}catch{}
-  const items=[];const regex=/\{\s*"id"\s*:\s*"([^"]+)"\s*,\s*"score"\s*:\s*(\d+)/g;
-  let m;while((m=regex.exec(text))!==null){items.push({id:m[1],score:Number(m[2])});}
+  const items=[];
+  const objRegex=/\{[^{}]*\}/g;
+  let block;
+  while((block=objRegex.exec(text))!==null){
+    const idM=block[0].match(/"id"\s*:\s*"([^"]+)"/);
+    const scoreM=block[0].match(/"score"\s*:\s*(\d+)/);
+    if(idM&&scoreM)items.push({id:idM[1],score:Number(scoreM[1])});
+  }
   return items;
 }
 

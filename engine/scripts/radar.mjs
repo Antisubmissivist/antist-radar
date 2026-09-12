@@ -53,6 +53,7 @@ const snapshot=publicSnapshot(candidate,secrets);await atomic('runs/public.json'
 if(push){
   if(!process.env.RADAR_INGEST_TOKEN)throw new Error('Missing ingestion credential');
   const r=await fetch(origin+'/api/ingest',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.RADAR_INGEST_TOKEN}`},body:JSON.stringify(snapshot),signal:AbortSignal.timeout(60000)});
+  const body=await r.json().catch(()=>null);
   await atomic('runs/decision-state.json',delta.state);
   try{await fetch(origin+'/api/state',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.RADAR_INGEST_TOKEN}`},body:JSON.stringify(delta.state),signal:AbortSignal.timeout(15000)});}catch(e){console.error('[radar] remote state push skipped:',e.message);}
   console.log(JSON.stringify({published:true,id:snapshot.id,events:snapshot.events.length,analysisUsage:analysis.usage,receipt:body}));

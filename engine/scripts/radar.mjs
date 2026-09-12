@@ -2,7 +2,7 @@ import '../apis/utils/env.mjs';
 import {mkdir,readFile,writeFile,rename} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {fullBriefing} from '../apis/briefing.mjs';
-import {collectFeeds,usableEvidence} from '../apis/sources/radar-feeds.mjs';
+import {collectFeeds,usableEvidence,scrub} from '../apis/sources/radar-feeds.mjs';
 import {changes,eventId,eligibility} from '../lib/decision-events.mjs';
 import {analyseRadar} from '../lib/radar-analysis.mjs';
 import {publicSnapshot} from '../lib/radar-contract.mjs';
@@ -24,7 +24,7 @@ function add(source,category,title,url,evidence,at=null,stableId=url) {if(!title
 for(const a of (s.AIInfra?.hardSignals||[]).slice(0,8))add(a.from,'ai',a.title,a.url,a.title,a.at);
 for(const a of (s.GDELT?.allArticles||[]).slice(0,5))add('GDELT','geopolitics',a.title,a.url,a.title);
 for(const a of (s['CISA-KEV']?.vulnerabilities||[]).slice(0,5))add('CISA-KEV','tech',`${a.cveID}: ${a.vulnerabilityName}`,`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,`${a.vendorProject} ${a.product}. ${a.shortDescription||''}. ${a.requiredAction||''}. Federal remediation due date is not a deadline applying to every reader.`,null,a.cveID);
-const all=[...new Map(raw.map(x=>[x.id,x])).values()];
+const all=[...new Map(raw.map(x=>[x.id,x])).values()].map(x=>({...x,title:scrub(x.title),evidence:scrub(x.evidence)}));
 // Drop items with no usable content (unreadable/missing extraction): only real news stays.
 const unique=all.filter(x=>usableEvidence(x.evidence,x.title));
 const droppedEvidence=all.length-unique.length;
@@ -37,6 +37,8 @@ const known={YFinance:'https://finance.yahoo.com/',AIInfra:'https://news.ycombin
 const health=sweep.health;const sources=Object.keys(sweep.timing||{}).filter(n=>n!=='Positions').map(name=>({name,url:known[name]||'https://github.com/calesthio/Crucix',fetchedAt:sweep.crucix.timestamp,status:health.ok.includes(name)?'ok':health.dead.some(x=>x.name===name)?'unavailable':'degraded',count:0}));
 sources.push(...feeds.map(f=>({name:f.name,url:f.url,fetchedAt:f.fetchedAt,status:f.status,count:f.items.length})));
 const candidate={schema:2,id:createHash('sha256').update(now).digest('hex').slice(0,24),generatedAt:now,sweepMs,analysisStatus:'complete',digest:analysis.digest,events:analysis.events,markets,sources,forecasts:analysis.forecasts};
+// Diagnose a private-value collision without printing the value itself.
+{const js=JSON.stringify(candidate);const keys=['LLM_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','BYREAL_WALLET','ACLED_EMAIL','ACLED_PASSWORD'];const hit=keys.find(k=>{const v=process.env[k];return v&&v.length>5&&js.includes(v);});if(hit)console.log(JSON.stringify({event:'private-value-in-snapshot',envKey:hit}));}
 const secrets=['LLM_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','BYREAL_WALLET','ACLED_EMAIL','ACLED_PASSWORD'].map(k=>process.env[k]).filter(Boolean);
 const snapshot=publicSnapshot(candidate,secrets);await atomic('runs/public.json',snapshot);
 if(push){

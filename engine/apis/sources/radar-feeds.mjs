@@ -7,6 +7,10 @@ const array=v=>v==null?[]:Array.isArray(v)?v:[v];
 // it to text instead of String(obj) === "[object Object]".
 const textOf=v=>{if(v==null)return '';if(typeof v==='string')return v;if(Array.isArray(v))return v.map(textOf).filter(Boolean).join(' ');if(typeof v==='object'){for(const k of ['#text','div','p','body','_']){if(v[k]!=null){const t=textOf(v[k]);if(t)return t;}}return Object.values(v).map(textOf).filter(Boolean).join(' ');}return String(v);};
 export const plain=v=>{const s=textOf(v).trim();if(!s||s==='[object Object]')return '';try{return cheerio.load(s).text().replace(/\s+/g,' ').trim();}catch{return s.replace(/\s+/g,' ').trim();}};
+// Scrub credentials/contacts at the ingestion boundary so the privacy guard in
+// publicSnapshot never trips on ordinary article text (it rejects any email).
+const SCRUB=[/[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/gi,/\b\d{8,12}:[A-Za-z0-9_-]{30,}\b/g,/\bsk-[a-z]{2}-[A-Za-z0-9_-]{10,}/gi,/\bgh[pousr]_[A-Za-z0-9]{20,}\b/g];
+export const scrub=v=>{let s=String(v??'');for(const r of SCRUB)s=s.replace(r,'[withheld]');return s;};
 // An item is usable only if it carries real detail beyond its headline.
 const NOISE=/^(\s*(subscribe|sign ?in|sign ?up|log ?in|read more|share|advertisement|sponsored|all rights reserved|cookies?|accept all|privacy policy|terms of (use|service))\b)/i;
 export const usableEvidence=(evidence,title)=>{const t=String(evidence||'').replace(/\s+/g,' ').trim();if(!t||/\[object object\]/i.test(t))return false;if(t===String(title||'').replace(/\s+/g,' ').trim())return false;if(t.length<40)return false;if(NOISE.test(t))return false;return true;};

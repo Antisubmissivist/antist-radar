@@ -27,6 +27,71 @@ function EventCard({e,index,l,w}:{e:any;index:number;l:Locale;w:Record<string,st
   </article>;
 }
 function ForecastCard({r,l,w}:{r:any;l:Locale;w:Record<string,string>}){const claim=JSON.parse(String(r.claim_json));const rationale=JSON.parse(String(r.rationale_json));return <div class="card p-5"><div class="flex items-center justify-between mb-4"><span class="badge badge-secondary">{w[String(r.status) as keyof typeof w]||r.status}</span><span class="text-xs text-muted-foreground tabular-nums">{String(r.created_at).slice(0,10)}</span></div><h3 data-tts-title class="font-semibold leading-relaxed">{claim[l]}</h3><p data-tts-summary class="text-sm text-muted-foreground mt-2 leading-relaxed">{rationale[l]}</p><div class="grid grid-cols-2 gap-4 border-t mt-5 pt-4"><div><div class="text-[10px] text-muted-foreground">{w.prob}</div><div class="text-2xl font-semibold tabular-nums mt-0.5">{Math.round(Number(r.probability)*100)}%</div></div><div><div class="text-[10px] text-muted-foreground">{w.due}</div><div class="text-xs tabular-nums mt-1.5">{formatDate(String(r.due_at),l)}</div></div></div>{r.observed!=null&&<p class="text-xs tabular-nums mt-3">{r.symbol}: {r.observed} · {r.observation_at}</p>}<p class="text-[10px] text-muted-foreground mt-4 leading-relaxed">{w.disclaimer}</p></div>;}
+function computeRankScore(score:number,dateStr:string|null|undefined):number{
+  if(score<60)return -1;
+  const ts=Date.parse(dateStr||'')||Date.now();
+  const ageHours=Math.max(0,(Date.now()-ts)/3600000);
+  const decay=Math.pow(ageHours/48+1,1.2);
+  return score/decay;
+}
+function Pagination({page,totalPages,makeHref,w}:{page:number;totalPages:number;makeHref:(p:number)=>string;w:Record<string,string>}){
+  if(totalPages<=1)return null;
+  const pages:(number|'ellipsis')[]=[];
+  if(totalPages<=7){
+    for(let i=1;i<=totalPages;i++)pages.push(i);
+  }else{
+    pages.push(1);
+    if(page>3)pages.push('ellipsis');
+    const start=Math.max(2,page-1);
+    const end=Math.min(totalPages-1,page+1);
+    for(let i=start;i<=end;i++){if(i>1&&i<totalPages)pages.push(i);}
+    if(page<totalPages-2)pages.push('ellipsis');
+    pages.push(totalPages);
+  }
+  return (
+    <nav role="navigation" aria-label="pagination" class="mt-12 mx-auto flex w-full justify-center">
+      <ul class="flex flex-wrap items-center gap-1.5 list-none p-0 m-0">
+        <li>
+          {page>1?(
+            <a href={makeHref(page-1)} class="btn btn-outline btn-sm gap-1 pl-2.5" aria-label="Previous page">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              <span class="hidden sm:inline">{w.newer}</span>
+            </a>
+          ):(
+            <span class="btn btn-outline btn-sm gap-1 pl-2.5 opacity-40 pointer-events-none" aria-disabled="true">
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg>
+              <span class="hidden sm:inline">{w.newer}</span>
+            </span>
+          )}
+        </li>
+        {pages.map((p,idx)=>(
+          <li key={idx}>
+            {p==='ellipsis'?(
+              <span class="flex h-8 w-8 items-center justify-center text-xs text-muted-foreground select-none" aria-hidden="true">…</span>
+            ):(
+              <a href={makeHref(p as number)} class={`btn btn-sm min-w-8 px-2.5 ${p===page?'btn-primary font-semibold shadow-xs':'btn-outline hover:bg-accent'}`} aria-current={p===page?'page':undefined}>
+                {p}
+              </a>
+            )}
+          </li>
+        ))}
+        <li>
+          {page<totalPages?(
+            <a href={makeHref(page+1)} class="btn btn-outline btn-sm gap-1 pr-2.5" aria-label="Next page">
+              <span class="hidden sm:inline">{w.older}</span>
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </a>
+          ):(
+            <span class="btn btn-outline btn-sm gap-1 pr-2.5 opacity-40 pointer-events-none" aria-disabled="true">
+              <span class="hidden sm:inline">{w.older}</span>
+              <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+            </span>
+          )}
+        </li>
+      </ul>
+    </nav>
+  );
+}
 async function ledger(db:D1Database){return (await db.prepare('SELECT * FROM forecasts ORDER BY created_at DESC LIMIT 10').all()).results;}
 async function settle(env:Bindings,s:Snapshot){
   const rows=(await env.DB.prepare("SELECT * FROM forecasts WHERE status='open' AND due_at<=? LIMIT 100").bind(new Date().toISOString()).all()).results;
@@ -183,15 +248,21 @@ return c.html(<html lang={l}>{pageHead(l,`/${l}/c/${cat}`)}<body><SiteHeader l={
 <form method="get" action={`/${l}/c/${cat}`} class="mb-4 flex flex-wrap gap-2"><input type="search" name="q" value={q} class="input h-9 w-full sm:w-80" placeholder={w.search}/><button class="btn btn-outline btn-sm">{w.search}</button></form>
 <div class="mb-8 inline-flex flex-wrap items-center gap-1 rounded-lg bg-muted p-1"><a href={`/${l}/c/all`} class={`tab ${cat==='all'?'tab-active':''}`}>{w.archive}</a>{BOARDS.map(b=><a href={`/${l}/c/${b}`} class={`tab ${b===cat?'tab-active':''}`}>{w[b]}</a>)}</div>
 {events.length?<div class="grid md:grid-cols-2 gap-4">{events.map((e,i)=><EventCard e={e} index={i} l={l} w={w}/>)}</div>:<div class="card p-12 text-center text-sm text-muted-foreground">{w.noresults}</div>}
-<div class="mt-10 flex items-center justify-between gap-4"><div>{page>1?<a href={qs(page-1)} class="btn btn-outline btn-sm">← {w.newer}</a>:null}</div><div class="text-xs tabular-nums text-muted-foreground">{w.page} {page} / {Math.max(1,Math.ceil(total/per))}</div><div>{hasMore?<a href={qs(page+1)} class="btn btn-outline btn-sm">{w.older} →</a>:null}</div></div>
+<Pagination page={page} totalPages={Math.max(1,Math.ceil(total/per))} makeHref={qs} w={w}/>
 </main><SiteFooter w={w}/></body></html>);});
-app.get('/:locale/ledger',async c=>{const l=c.req.param('locale') as Locale;if(!languages.includes(l))return c.notFound();const w=words[l] as unknown as Record<string,string>;const page=Math.max(1,Number(c.req.query('page'))||1);const per=10;const off=(page-1)*per;const res=await c.env.DB.prepare('SELECT * FROM forecasts ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(per+1,off).all();const rows=(res.results||[]);const hasMore=rows.length>per;const list=rows.slice(0,per);const cntF=await c.env.DB.prepare('SELECT COUNT(*) n FROM forecasts').first() as {n?:number}|null;const totalF=Number(cntF?.n||rows.length);const q2=(p:number)=>`/${l}/ledger${p>1?`?page=${p}`:''}`;c.header('Cache-Control','no-store');c.header('Content-Language',l);return c.html(<html lang={l}>{pageHead(l,`/${l}/ledger`)}<body><SiteHeader l={l} w={w}/><main class="mx-auto max-w-6xl px-4 md:px-6 pb-20"><div class="pt-8"><div class="inline-flex items-center gap-1 rounded-lg border bg-card p-1 shadow-sm"><a href={`/${l}`} class="btn btn-ghost btn-sm">← {w.back}</a></div></div><div class="mt-4 mb-8 flex flex-wrap items-end justify-between gap-4"><div><p class="text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">On the record</p><h1 class="text-3xl font-bold tracking-tight">{w.ledger}</h1><p class="text-sm text-muted-foreground mt-1">{w.before}</p></div><div class="flex items-center gap-3"><span class="text-xs tabular-nums text-muted-foreground">{w.page} {page} / {Math.max(1,Math.ceil(totalF/per))}</span><button data-speak class="btn btn-outline btn-sm">🔊 {w.listen}</button></div></div>{list.length?<div class="grid md:grid-cols-2 gap-4">{list.map(r=><ForecastCard r={r} l={l} w={w}/>)}</div>:<div class="card p-12 text-center text-sm text-muted-foreground">{w.noForecast}</div>}<div class="mt-10 flex items-center justify-between gap-4"><div>{page>1?<a href={q2(page-1)} class="btn btn-outline btn-sm">← {w.newer}</a>:null}</div><div class="text-xs tabular-nums text-muted-foreground">{w.page} {page} / {Math.max(1,Math.ceil(totalF/per))}</div><div>{hasMore?<a href={q2(page+1)} class="btn btn-outline btn-sm">{w.older} →</a>:null}</div></div></main><SiteFooter w={w}/></body></html>);});
+app.get('/:locale/ledger',async c=>{const l=c.req.param('locale') as Locale;if(!languages.includes(l))return c.notFound();const w=words[l] as unknown as Record<string,string>;const page=Math.max(1,Number(c.req.query('page'))||1);const per=10;const off=(page-1)*per;const res=await c.env.DB.prepare('SELECT * FROM forecasts ORDER BY created_at DESC LIMIT ? OFFSET ?').bind(per+1,off).all();const rows=(res.results||[]);const hasMore=rows.length>per;const list=rows.slice(0,per);const cntF=await c.env.DB.prepare('SELECT COUNT(*) n FROM forecasts').first() as {n?:number}|null;const totalF=Number(cntF?.n||rows.length);const q2=(p:number)=>`/${l}/ledger${p>1?`?page=${p}`:''}`;c.header('Cache-Control','no-store');c.header('Content-Language',l);return c.html(<html lang={l}>{pageHead(l,`/${l}/ledger`)}<body><SiteHeader l={l} w={w}/><main class="mx-auto max-w-6xl px-4 md:px-6 pb-20"><div class="pt-8"><div class="inline-flex items-center gap-1 rounded-lg border bg-card p-1 shadow-sm"><a href={`/${l}`} class="btn btn-ghost btn-sm">← {w.back}</a></div></div><div class="mt-4 mb-8 flex flex-wrap items-end justify-between gap-4"><div><p class="text-[10px] uppercase tracking-widest text-muted-foreground mb-1.5">On the record</p><h1 class="text-3xl font-bold tracking-tight">{w.ledger}</h1><p class="text-sm text-muted-foreground mt-1">{w.before}</p></div><div class="flex items-center gap-3"><span class="text-xs tabular-nums text-muted-foreground">{w.page} {page} / {Math.max(1,Math.ceil(totalF/per))}</span><button data-speak class="btn btn-outline btn-sm">🔊 {w.listen}</button></div></div>{list.length?<div class="grid md:grid-cols-2 gap-4">{list.map(r=><ForecastCard r={r} l={l} w={w}/>)}</div>:<div class="card p-12 text-center text-sm text-muted-foreground">{w.noForecast}</div>}<Pagination page={page} totalPages={Math.max(1,Math.ceil(totalF/per))} makeHref={q2} w={w}/></main><SiteFooter w={w}/></body></html>);});
 app.get('/:locale',async c=>{
   const l=c.req.param('locale') as Locale;if(!languages.includes(l))return c.notFound();
   const __ver=await c.env.MONITOR.get('radar:version')||'0';const __cache=(caches as unknown as {default:{match(r:Request):Promise<Response|undefined>;put(r:Request,res:Response):Promise<void>}}).default;const __ck=new Request(`${ORIGIN}/__ssr/${l}?v=${encodeURIComponent(__ver)}`,{method:'GET'});try{const __hit=await __cache.match(__ck);if(__hit){const __r=new Response(__hit.body,__hit);__r.headers.set('Cache-Control','no-store');return __r;}}catch{}const w=words[l];const s=await latestSnapshot(c.env);const rows=await ledger(c.env.DB);
   const agg=await c.env.DB.prepare('SELECT category, COUNT(*) n FROM events GROUP BY category').all();
   const countMap=new Map((agg.results||[]).map(r=>[String(r.category),Number(r.n)]));
   const totalEvents=(agg.results||[]).reduce((a,r)=>a+Number(r.n),0);
+  const recentRes=await c.env.DB.prepare("SELECT * FROM events WHERE score >= 60 AND first_seen >= datetime('now', '-7 days') ORDER BY COALESCE(published_at,first_seen) DESC LIMIT 150").all();
+  const recentEvents=(recentRes.results||[]).map(rowToEvent);
+  const eventMap=new Map<string,any>();
+  for(const e of recentEvents){if(e&&e.id)eventMap.set(e.id,e);}
+  for(const e of (s?.events||[])){if(e&&e.id&&(e.score||0)>=60)eventMap.set(e.id,e);}
+  const allCandidates=Array.from(eventMap.values());
   const stale=!s||Date.now()-Date.parse(s.generatedAt)>150*60000;
   const healthy=s?.sources.filter(x=>['ok','quiet'].includes(x.status)).length||0;
   const strip=(s?.markets.filter(q=>STRIP.includes(q.symbol))||[]);
@@ -201,7 +272,15 @@ app.get('/:locale',async c=>{
   <main class="mx-auto max-w-6xl px-4 md:px-6 pb-16"><section class="py-12 md:py-16 grid lg:grid-cols-[1.4fr_1fr] gap-8 items-start"><div><span class="badge badge-secondary mb-5 gap-1.5">{(stale?<span class="inline-block h-2 w-2 rounded-full bg-down"/>:<span class="live-dot inline-block h-2 w-2 rounded-full bg-up"/>)} {w.tag}</span><h1 class="text-4xl md:text-5xl lg:text-6xl font-bold tracking-tight leading-[1.06]">{w.hero}<br/><span class="text-muted-foreground">{w.sub}</span></h1><p class="mt-5 max-w-xl text-muted-foreground leading-relaxed">{w.intro}</p></div><div class="card p-6"><div class="flex items-center justify-between text-xs text-muted-foreground mb-3"><span class="uppercase tracking-wide">{w.brief}</span><span class="tabular-nums">{s?formatDate(s.generatedAt,l):'—'}</span></div><p class="text-base leading-relaxed">{s?.digest[l]||w.empty}</p><p class="text-[11px] text-muted-foreground mt-4">{w.generated}</p></div></section>
   <section id="markets" class="mb-12"><div class="card p-4 md:p-5"><div class="flex flex-wrap items-center justify-between gap-3 mb-4"><div class="flex items-center gap-2"><h2 class="text-sm font-semibold tracking-tight">{w.markets}</h2><span class="badge badge-outline gap-1.5 text-[10px]"><span class="live-dot inline-block h-1.5 w-1.5 rounded-full bg-up"></span>LIVE</span><span data-markets-status class="text-[11px] text-muted-foreground"></span></div><div class="flex items-center gap-2"><div class="relative"><input data-markets-search class="input h-8 w-44 text-xs" placeholder={w.addSymbol} autocomplete="off"/><div data-markets-suggest class="absolute right-0 top-9 z-50 hidden w-72 overflow-hidden rounded-md border bg-popover text-popover-foreground shadow-md"></div></div><button data-markets-done class="btn btn-primary btn-sm hidden">{w.done}</button><button data-markets-edit class="btn btn-outline btn-sm">{w.editLayout}</button></div></div><div data-markets class="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2">{strip.map(q=><a href={q.source} target="_blank" rel="noopener noreferrer" class="market-tile"><div class="text-[11px] font-medium text-muted-foreground truncate">{q.name}</div><div class="flex items-baseline justify-between gap-2"><span class="text-lg font-semibold tabular-nums">{q.price.toLocaleString(l,{maximumFractionDigits:2})}</span><span class={`text-xs font-medium tabular-nums ${q.changePct>=0?'text-up':'text-down'}`}>{q.changePct>=0?'+':''}{q.changePct}%</span></div></a>)}</div><p class="text-[11px] text-muted-foreground mt-3 hidden md:block">{w.hint}</p></div></section>
   <section id="signals" class="mb-5"><div class="flex flex-wrap items-center justify-between gap-3 mb-4"><h2 class="text-xl font-semibold tracking-tight">{w.signals} <span class="text-sm text-muted-foreground tabular-nums">{String(totalEvents).padStart(2,'0')}</span></h2><div class="flex items-center gap-2"><input data-search type="search" class="input h-9 w-full sm:w-64" placeholder={w.search}/><button data-boards-done class="btn btn-primary btn-sm hidden">{w.done}</button><button data-boards-edit class="btn btn-outline btn-sm">{w.editBoards}</button><button data-speak class="btn btn-outline btn-sm">🔊 {w.listen}</button></div></div><div data-board-chips class="hidden mt-3"><div class="inline-flex flex-wrap items-center gap-1 rounded-lg bg-muted p-1"><span class="tab opacity-60 pointer-events-none">{w.all}</span>{BOARDS.map(b=><button data-chip={b} class="tab cursor-move">{w[b]}</button>)}</div></div><p class="text-[11px] text-muted-foreground hidden md:block">{w.bhint}</p></section>
-  <div data-boards>{BOARDS.map(b=>{const list=(s?.events||[]).filter(e=>e.category===b).sort((x,y)=>(y.score||0)-(x.score||0)).slice(0,3);return <section id={`board-${b}`} data-board={b} data-board-section={b} class="mb-10"><div class="flex items-center justify-between mb-4"><h3 class="text-lg font-semibold tracking-tight"><span data-board-handle class="hidden cursor-move text-muted-foreground mr-1">⠿</span><a href={`/${l}/c/${b}`} class="no-underline">{w[b]}</a> <span class="text-xs text-muted-foreground tabular-nums">{String(countMap.get(b)||0).padStart(2,'0')}</span></h3><div class="flex items-center gap-1"><button data-board-hide={b} class="btn btn-ghost btn-sm hidden" title="hide/show">◌</button><a href={`/${l}/c/${b}`} class="btn btn-outline btn-sm">{w.more} →</a></div></div>{list.length?<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-3">{list.map((e,i)=><EventCard e={e} index={i} l={l} w={w}/>)}</div>:<p class="text-sm text-muted-foreground">{w.noresults}</p>}</section>;})}</div>
+  <div data-boards>{BOARDS.map(b=>{
+    const list=allCandidates
+      .filter(e=>e.category===b&&(e.score||0)>=60)
+      .map(e=>({...e,_rank:computeRankScore(e.score||0,e.publishedAt||e.fetchedAt)}))
+      .filter(e=>e._rank>0)
+      .sort((a,b)=>b._rank-a._rank)
+      .slice(0,3);
+    return <section id={`board-${b}`} data-board={b} data-board-section={b} class="mb-10"><div class="flex items-center justify-between mb-4"><h3 class="text-lg font-semibold tracking-tight"><span data-board-handle class="hidden cursor-move text-muted-foreground mr-1">⠿</span><a href={`/${l}/c/${b}`} class="no-underline">{w[b]}</a> <span class="text-xs text-muted-foreground tabular-nums">{String(countMap.get(b)||0).padStart(2,'0')}</span></h3><div class="flex items-center gap-1"><button data-board-hide={b} class="btn btn-ghost btn-sm hidden" title="hide/show">◌</button><a href={`/${l}/c/${b}`} class="btn btn-outline btn-sm">{w.more} →</a></div></div>{list.length?<div class="grid md:grid-cols-2 lg:grid-cols-3 gap-3">{list.map((e,i)=><EventCard e={e} index={i} l={l} w={w}/>)}</div>:<p class="text-sm text-muted-foreground">{w.noresults}</p>}</section>;
+  })}</div>
   <p data-no-results hidden class="py-12 text-center text-muted-foreground">{w.noresults}</p>
   <section id="ledger" class="py-12 border-t"><div class="mb-6 flex items-start justify-between gap-4"><div><p class="text-[10px] uppercase tracking-widest text-muted-foreground mb-2">On the record</p><h2 class="text-xl font-semibold tracking-tight">{w.ledger}</h2><p class="text-sm text-muted-foreground mt-1">{w.before}</p></div><a href={`/${l}/ledger`} class="btn btn-outline btn-sm shrink-0">{w.more} →</a></div><div class="grid md:grid-cols-2 gap-4">{rows.length?rows.slice(0,10).map(r=><ForecastCard r={r} l={l} w={w}/>):<p class="text-sm text-muted-foreground">{w.noForecast}</p>}</div></section>
   <section id="sources" class="py-12 border-t grid md:grid-cols-[1fr_2fr] gap-8"><div><h2 class="text-xl font-semibold tracking-tight">{w.sources}</h2><p class="text-4xl font-semibold tabular-nums mt-3">{healthy}<span class="text-xl text-muted-foreground"> / {s?.sources.length||0}</span></p><p class="text-xs text-muted-foreground mt-1">{w.healthy}</p></div><div class="grid sm:grid-cols-3 gap-x-4">{s?.sources.map(source=><a href={source.url} target="_blank" rel="noopener noreferrer" class="flex justify-between gap-3 border-b py-2.5 text-xs"><span class="truncate">{source.name}</span><span class={['ok','quiet'].includes(source.status)?'text-up':'text-muted-foreground'}>{source.status}</span></a>)}</div></section>

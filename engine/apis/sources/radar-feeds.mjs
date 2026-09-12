@@ -64,13 +64,15 @@ async function grants() {
   }));return {items,scanned:data.result.length};
 }
 async function policies() {
-  const r=await feed('e-Gov','japan-residence','https://public-comment.e-gov.go.jp/rss/pcm_list.xml','draft');
+  const r=await feed('e-Gov','japan-life','https://public-comment.e-gov.go.jp/rss/pcm_list.xml','draft');
   // The official RSS identifies consultation, not an enacted rule.
   r.items=await Promise.all(r.items.slice(0,6).map(async e=>{
     const raw=await request(e.url);const $=cheerio.load(raw);$('script,style,header,footer,nav').remove();
     const body=plain($('main').length?$('main').html():$('body').html());
     const at=body.search(/受付締切|意見.*締切|意見.*締め切り/);
-    return {...e,evidence:body.slice(Math.max(0,at-400),Math.max(0,at-400)+1800),unknowns:'Draft consultation only; enactment, applicability and exact deadline must be verified in the official notice.'};
+    const combined=`${e.title} ${body}`;
+    const category=/出入国|在留|ビザ|外国人|特定技能|難民|技能実習|育成就労|国籍法|永住|帰化/i.test(combined)?'japan-residence':/IT|通信|電波|AI|デジタル|サイバー|半導体/i.test(combined)?'tech':'japan-life';
+    return {...e,category,evidence:body.slice(Math.max(0,at-400),Math.max(0,at-400)+1800),unknowns:'Draft consultation only; enactment, applicability and exact deadline must be verified in the official notice.'};
   }));return r;
 }
 export function noticeLinks(raw,base,pattern) {
@@ -91,7 +93,9 @@ async function notices(name,category,base,pattern) {
     const title=plain(doc('h1').first().text())||item.title;
     const at=body.indexOf(title);const excerpt=body.slice(Math.max(0,at),Math.max(0,at)+1700);
     const date=body.match(/(20\d{2})年\s*(\d{1,2})月\s*(\d{1,2})日/);
-    return event(name,category,{...item,title,evidence:excerpt.replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g,'[official contact omitted]'),
+    const text=`${title} ${excerpt}`;
+    const finalCategory=(name==='JASSO'&&/ビザ|在留|在留資格|留学ビザ|海外申請|入国/i.test(text))?'japan-residence':category;
+    return event(name,finalCategory,{...item,title,evidence:excerpt.replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g,'[official contact omitted]'),
       // A date anywhere in a document is not necessarily its publication date.
       publishedAt:iso(doc('meta[property="article:published_time"]').attr('content')),unknowns:'Verify the official conditions and deadlines. Publication date is unknown unless supplied by page metadata.'});
   }));return {items,scanned:links.length};
@@ -142,6 +146,11 @@ async function gnews(source,category,query) {
   const all=parseFeed(await request(url));
   return {scanned:all.length,items:all.slice(0,8).map(x=>event(source,category,{...x,sourceId:x.url}))};
 }
+async function marketwatch() {
+  const r=await feed('MarketWatch','stocks','https://feeds.content.dowjones.io/public/rss/mw_topstories');
+  const JUNK=/personal-finance|lifestyle|columnist|dear-quentin|on-my-late-husbands|wedding|relationship|restaurant/i;
+  return {scanned:r.scanned,items:r.items.filter(i=>!JUNK.test(i.url)&&!JUNK.test(i.title))};
+}
 export const FEEDS=[
   {name:'GitHub Releases',url:'https://docs.github.com/en/rest/releases/releases',collect:releases},
   {name:'ClawFeed',url:'https://clawfeed.kevinhe.io/',collect:clawfeed},
@@ -150,7 +159,7 @@ export const FEEDS=[
   {name:'TechCrunch',url:'https://techcrunch.com/feed/',collect:()=>feed('TechCrunch','tech','https://techcrunch.com/feed/')},
   {name:'Engadget',url:'https://www.engadget.com/rss.xml',collect:()=>feed('Engadget','tech','https://www.engadget.com/rss.xml')},
   {name:'9to5Mac',url:'https://9to5mac.com/feed/',collect:()=>feed('9to5Mac','tech','https://9to5mac.com/feed/')},
-  {name:'JVN',url:'https://jvn.jp/rss/',collect:()=>feed('JVN','japan-life','https://jvn.jp/rss/jvn.rdf')},
+  {name:'JVN',url:'https://jvn.jp/rss/',collect:()=>feed('JVN','tech','https://jvn.jp/rss/jvn.rdf')},
   {name:'e-Gov',url:'https://public-comment.e-gov.go.jp/',collect:policies},
   {name:'JGrants',url:'https://developers.digital.go.jp/documents/jgrants/api/',collect:grants},
   {name:'Greenhouse · Cloudflare',url:'https://www.cloudflare.com/careers/jobs/',collect:jobs},
@@ -160,7 +169,7 @@ export const FEEDS=[
   {name:'Cointelegraph',url:'https://cointelegraph.com/rss',collect:()=>feed('Cointelegraph','crypto','https://cointelegraph.com/rss')},
   {name:'Decrypt',url:'https://decrypt.co/feed',collect:()=>feed('Decrypt','crypto','https://decrypt.co/feed')},
   {name:'CoinDesk',url:'https://www.coindesk.com/arc/outboundfeeds/rss/',collect:()=>feed('CoinDesk','crypto','https://www.coindesk.com/arc/outboundfeeds/rss/')},
-  {name:'MarketWatch',url:'https://feeds.content.dowjones.io/public/rss/mw_topstories',collect:()=>feed('MarketWatch','stocks','https://feeds.content.dowjones.io/public/rss/mw_topstories')},
+  {name:'MarketWatch',url:'https://feeds.content.dowjones.io/public/rss/mw_topstories',collect:marketwatch},
   {name:'Yahoo Finance',url:'https://feeds.finance.yahoo.com/rss/2.0/headline',collect:stocks},
   {name:'BBC World',url:'https://feeds.bbci.co.uk/news/world/rss.xml',collect:()=>feed('BBC World','geopolitics','https://feeds.bbci.co.uk/news/world/rss.xml')},
   {name:'Al Jazeera',url:'https://www.aljazeera.com/xml/rss/all.xml',collect:()=>feed('Al Jazeera','geopolitics','https://www.aljazeera.com/xml/rss/all.xml')},

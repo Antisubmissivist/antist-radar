@@ -28,8 +28,17 @@ const all=[...new Map(raw.map(x=>[x.id,x])).values()].map(x=>({...x,title:scrub(
 // Drop items with no usable content (unreadable/missing extraction): only real news stays.
 const unique=all.filter(x=>usableEvidence(x.evidence,x.title));
 const droppedEvidence=all.length-unique.length;
-if(droppedEvidence)console.log(JSON.stringify({event:'dropped-unusable',count:droppedEvidence,of:all.length}));
-const previous=await load('runs/decision-state.json',{});const delta=changes(unique,previous);
+async function fetchRemoteState(endpoint,token){
+  if(!token)return null;
+  try{
+    const r=await fetch(endpoint+'/api/state',{headers:{Authorization:`Bearer ${token}`},signal:AbortSignal.timeout(10000)});
+    if(r.ok){const d=await r.json();if(d&&typeof d==='object'&&!Array.isArray(d)&&Object.keys(d).length)return d;}
+  }catch(e){console.error('[radar] remote state fetch skipped:',e.message);}
+  return null;
+}
+const remoteState=await fetchRemoteState(origin,process.env.RADAR_INGEST_TOKEN);
+const previous=remoteState||await load('runs/decision-state.json',{});
+const delta=changes(unique,previous);
 // 10-day window: keep the candidate pool bounded so scoring stays fast.
 const cutoff=Date.now()-10*86400000;
 const analysis=await analyseRadar(delta.events.filter(e=>eligibility(e)!=='ineligible'&&Date.parse(e.publishedAt||e.fetchedAt||0)>=cutoff),markets);
@@ -44,7 +53,7 @@ const snapshot=publicSnapshot(candidate,secrets);await atomic('runs/public.json'
 if(push){
   if(!process.env.RADAR_INGEST_TOKEN)throw new Error('Missing ingestion credential');
   const r=await fetch(origin+'/api/ingest',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.RADAR_INGEST_TOKEN}`},body:JSON.stringify(snapshot),signal:AbortSignal.timeout(60000)});
-  const body=await r.json();if(!r.ok||!body.ok)throw new Error(`Publication rejected (${r.status})`);
   await atomic('runs/decision-state.json',delta.state);
+  try{await fetch(origin+'/api/state',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${process.env.RADAR_INGEST_TOKEN}`},body:JSON.stringify(delta.state),signal:AbortSignal.timeout(15000)});}catch(e){console.error('[radar] remote state push skipped:',e.message);}
   console.log(JSON.stringify({published:true,id:snapshot.id,events:snapshot.events.length,analysisUsage:analysis.usage,receipt:body}));
 }else console.log(JSON.stringify({dryRun:true,id:snapshot.id,events:snapshot.events.length,sources:snapshot.sources.length,sweepMs,analysisUsage:analysis.usage}));

@@ -23,8 +23,9 @@ export function judgeEdition(editionData,events,markets){
     if(!original){errors.push('unknown evidence id '+row.id);continue;}
     if(selected.some(e=>e.id===row.id)){errors.push('duplicate evidence id '+row.id);continue;}
     let bad=false;
+    const evText=`${original.title} ${original.evidence}`;
     for(const k of FIELDS){
-      try{multilingual(row[k]);validateEditorial(row[k],{title:k==='title'});if(CONTAM.test(row[k].ja))throw new Error('ja contamination');}
+      try{multilingual(row[k]);validateEditorial(row[k],{title:k==='title',evidence:k==='action'?'':evText});if(CONTAM.test(row[k].ja))throw new Error('ja contamination');}
       catch(e){errors.push(`${k}[${row.id}]: ${e.message}`);bad=true;}
     }
     if(!bad)selected.push({...original,title:row.title,summary:row.summary,audience:row.audience,action:row.action,unknowns:row.unknowns});

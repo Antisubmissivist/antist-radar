@@ -7,20 +7,27 @@ import {judgeEdition} from './radar-judge.mjs';
 const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
 const parseJson=t=>{const f=String(t||'').replace(/^```(?:json)?\s*|\s*```$/g,'').trim();const a=f.indexOf('{'),b=f.lastIndexOf('}');return JSON.parse(a>=0&&b>a?f.slice(a,b+1):f);};
 
+function extractScoredItems(text){
+  try{const j=parseJson(text);if(j&&Array.isArray(j.items))return j.items;}catch{}
+  const items=[];const regex=/\{\s*"id"\s*:\s*"([^"]+)"\s*,\s*"score"\s*:\s*(\d+)/g;
+  let m;while((m=regex.exec(text))!==null){items.push({id:m[1],score:Number(m[2])});}
+  return items;
+}
+
 // Pre-selection: score every candidate for the reader persona, then take the top
 // 3 per board deterministically (fill from the freshness pool).
 async function selectByPersona(provider,pool){
   if(!pool.length)return [];
   try{
     const r=await provider.complete(selectionSystemPrompt(),JSON.stringify(pool.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,180)}))),{maxTokens:12000,timeout:180000});
-    const j=parseJson(r.text);
+    const items=extractScoredItems(r.text);
     const byId=new Map(pool.map(e=>[e.id,e]));const scored=[];
-    for(const row of (Array.isArray(j&&j.items)?j.items:[])){const id=String((row&&row.id)||'');const e=byId.get(id);if(e&&!scored.includes(e)){e.score=Math.max(0,Math.min(100,Math.round(Number(row&&row.score)||0)));scored.push(e);}}
+    for(const row of items){const id=String((row&&row.id)||'');const e=byId.get(id);if(e&&!scored.includes(e)){e.score=Math.max(0,Math.min(100,Math.round(Number(row&&row.score)||0)));scored.push(e);}}
     scored.sort((x,y)=>(y.score||0)-(x.score||0));
     const per=new Map();const capped=[];
     const push=(e)=>{const n=per.get(e.category)||0;if(n>=3)return;per.set(e.category,n+1);capped.push(e);};
-    for(const e of scored)push(e);
-    for(const e of pool){if(capped.includes(e))continue;if(e.score===undefined)e.score=0;push(e);}
+    const MIN_RELEVANCE=35;
+    for(const e of scored){if((e.score||0)>=MIN_RELEVANCE)push(e);}
     console.error(`[radar] persona scored ${scored.length}, capped ${capped.length}/${pool.length}`);
     return capped;
   }catch(e){console.error('[radar] persona selection failed:',e.message);return [];}
@@ -30,7 +37,8 @@ function roundRobin(sorted,limit){const byCat=new Map();for(const e of sorted){c
 const ITEM_SYS=`あなたは日本語・英語・中国語の編集者です。与えられた候補だけを扱い、各言語の読者に自然な独立した文章を書きます。出力は JSON のみ。
 - 与えられた候補 ID を EACH 言語版に必ず一度ずつ、与えられた順序どおりに含める。ID を捏造しない。
 - 資料にない事実を足さない。ja は日本語のみ、en は英語のみ、zh は簡体字中国語のみ。混ぜない。
-- title ≤100 文字、summary・audience・unknowns ≤160 文字、action ≤300 文字。title 以外の叙述に数字・金額・日付を入れない。
+- title ≤100 文字、summary・audience・unknowns ≤160 文字、action ≤300 文字。
+- 数字・金額・日付・バージョンは、与えられた資料（evidence）に直接明記されている場合のみ記述可（推測や捏造は厳禁）。action（本站评价）には数字を入れない。
 - action は「本站评价」: 最も合う一つの視点（現代世俗人文主義／逃避主義／AI本主義）を選び、2–4 文の純粋な評価を書く。命令・助言・行動指示は禁止。生活に即した比喩を一つ。視点名は書かない。
 - 読者像: ${PERSONA_EN}
 Return {"ja":{"items":[{"id":"...","title":"...","summary":"...","audience":"...","action":"...","unknowns":"..."}]},"en":{same shape},"zh":{same shape}}`;
@@ -68,9 +76,9 @@ async function runItems(provider,candidates){
 export async function analyseRadar(events,markets){
   const provider=createLLMProvider({...config.llm,provider:process.env.RADAR_LLM_PROVIDER||config.llm.provider,model:process.env.RADAR_LLM_MODEL||config.llm.model});if(!provider?.isConfigured)throw new Error('Analysis provider unavailable');
   const sorted=[...events].sort((a,b)=>Date.parse(b.publishedAt||b.fetchedAt)-Date.parse(a.publishedAt||a.fetchedAt));
-  // Whole candidate pool (all eligible changed events across boards; 120 safety cap),
+  // Candidate pool (all eligible changed events across boards; 70 cap to prevent model JSON truncation),
   // scored by the persona; the code then takes the top 3 per board.
-  const pool=sorted.slice(0,120);
+  const pool=sorted.slice(0,70);
   const picked=await selectByPersona(provider,pool);
   const candidates=picked.length?picked:roundRobin(sorted,21);
   const freshMarkets=markets.filter(q=>Date.now()-Date.parse(q.at)<3600000&&['BTC-USD','ETH-USD','SOL-USD','^GSPC','^IXIC','^N225','NVDA','MSFT','GOOGL','AVGO','TSM','7203.T'].includes(q.symbol));
@@ -86,7 +94,7 @@ export async function analyseRadar(events,markets){
       const missing=candidates.filter(c=>!have.has(c.id));
       if(missing.length)throw new Error('Incomplete analysis: '+missing.length+' of '+candidates.length+' candidates missing');
       // Drop "no content" cards: the model states the material lacks usable detail.
-      const NOCONTENT=/没有提供|未提供更多|细节(尚|还)未|尚未(确认|明确)|正文不完整|无法读取|无法确认|无法获取|信息不足|内容不完整|確認できません|確認できない|詳細は未|本文が不完全|insufficient (evidence|information)|no further details|not (yet )?(confirmed|available|known)|incomplete|unreadable|cannot be (confirmed|determined)/i;
+      const NOCONTENT=/没有(提供|可读)|看不见内容|未提供更多|细节(尚|还)未|尚未(确认|明确)|正文不完整|无法(读取|确认|获取|证实)|信息不足|内容不完整|確認できません|確認できない|詳細は未|本文が不完全|insufficient (evidence|information)|no further details|not (yet )?(confirmed|available|known)|incomplete|unreadable|cannot be (confirmed|determined)/i;
       const okInfo=r=>r&&!NOCONTENT.test([r.summary&&r.summary.zh,r.summary&&r.summary.ja,r.summary&&r.summary.en].filter(Boolean).join(' '));
       const drop=new Set(lanes.en.filter(r=>!okInfo(r)).map(r=>r&&r.id).filter(Boolean));
       if(drop.size){for(const l of ['ja','en','zh'])lanes[l]=lanes[l].filter(r=>r&&!drop.has(r.id));console.log(JSON.stringify({event:'dropped-no-content',count:drop.size,ids:[...drop]}));}

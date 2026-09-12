@@ -154,13 +154,35 @@
   .market-tile { @apply relative flex flex-col gap-1 rounded-lg border bg-card p-3 transition-all hover:shadow-md; }
   .market-tile.dragging { @apply opacity-50 ring-2 ring-ring; }
   .market-tile.drop-target { @apply ring-2 ring-primary; }
+  .market-tile.flash-up { animation: flash-green .8s ease-out; }
+  .market-tile.flash-down { animation: flash-red .8s ease-out; }
   .dragging { @apply opacity-50; }
   .drop-target { @apply rounded-lg ring-2 ring-ring; }
+
+  .playing-card { @apply ring-2 ring-primary/60 border-primary/70 bg-accent/25 shadow-md transition-all duration-300; }
+  .card-focused { @apply ring-2 ring-ring border-foreground/30 shadow-md transition-all; }
 }
 
 @keyframes fade-in-up { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: none; } }
 .animate-in { animation: fade-in-up .3s ease-out both; }
 @keyframes pulse-dot { 0%,100% { opacity: 1; } 50% { opacity: .35; } }
 .live-dot { animation: pulse-dot 1.8s ease-in-out infinite; }
+
+@keyframes flash-green { 0% { background-color: hsl(var(--up) / 0.22); } 100% { background-color: transparent; } }
+@keyframes flash-red { 0% { background-color: hsl(var(--down) / 0.22); } 100% { background-color: transparent; } }
+
+@keyframes radar-pulse {
+  0% { transform: scale(0.95); opacity: 0.7; }
+  50% { transform: scale(1.08); opacity: 0.25; }
+  100% { transform: scale(0.95); opacity: 0.7; }
+}
+.radar-pulse { animation: radar-pulse 3s ease-in-out infinite; transform-origin: center; }
+
+@keyframes eq-bounce-1 { 0%, 100% { height: 4px; } 50% { height: 14px; } }
+@keyframes eq-bounce-2 { 0%, 100% { height: 12px; } 50% { height: 5px; } }
+@keyframes eq-bounce-3 { 0%, 100% { height: 6px; } 50% { height: 15px; } }
+.eq-bar-1 { animation: eq-bounce-1 0.8s ease-in-out infinite; }
+.eq-bar-2 { animation: eq-bounce-2 0.7s ease-in-out infinite; }
+.eq-bar-3 { animation: eq-bounce-3 0.9s ease-in-out infinite; }
 
 @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition: none !important; scroll-behavior: auto !important; } }

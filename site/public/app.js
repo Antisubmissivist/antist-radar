@@ -55,16 +55,21 @@ applyBoards();
 /* ---------- markets: live + search/add + reorder + hide/delete ---------- */
 const DEFAULTS=['BTC-USD','ETH-USD','SOL-USD','^GSPC','^IXIC','^N225','NVDA','^VIX'];
 const LS='radar-markets';let edit=false;let dragSym=null;let highlight=null;
+const prevPrices=new Map();
 const norm=s=>String(s||'').trim().replace(/^\./,'^').toUpperCase();
 function loadLayout(){let src;try{src=JSON.parse(localStorage.getItem(LS));}catch{}if(!Array.isArray(src)||!src.length)src=DEFAULTS;const seen=new Set();const out=[];for(const x of src){const it=typeof x==='string'?{symbol:x,hidden:false}:x;const sym=norm(it.symbol);if(!sym||seen.has(sym))continue;seen.add(sym);out.push({symbol:sym,hidden:!!it.hidden});}return out;}
 let layout=loadLayout();
 const saveLayout=()=>localStorage.setItem(LS,JSON.stringify(layout));
 
-function tileView(q){const up=q.changePct>=0;return `<a data-symbol="${esc(q.symbol)}" href="${esc(q.source)}" target="_blank" rel="noopener noreferrer" class="market-tile"><div class="text-[11px] font-medium text-muted-foreground truncate">${esc(q.name||q.symbol)}</div><div class="flex items-baseline justify-between gap-2"><span class="text-lg font-semibold tabular-nums">${Number(q.price).toLocaleString()}</span><span class="text-xs font-medium tabular-nums ${up?'text-up':'text-down'}">${up?'+':''}${q.changePct}%</span></div></a>`;}
-function tileEdit(q,item){const up=q.changePct>=0;return `<div data-symbol="${esc(item.symbol)}" draggable="true" class="market-tile cursor-move ${item.hidden?'opacity-50':''}"><div class="flex items-center justify-between gap-1"><span class="text-[11px] font-medium text-muted-foreground truncate">⠿ ${esc(q.name||q.symbol)}</span><span class="flex items-center gap-0.5"><button data-hide="${esc(item.symbol)}" title="hide/show" class="btn btn-ghost h-5 w-5 p-0 text-xs leading-none">${item.hidden?'◉':'◌'}</button><button data-del="${esc(item.symbol)}" title="remove" class="btn btn-ghost h-5 w-5 p-0 text-xs leading-none text-destructive">✕</button></span></div><div class="flex items-baseline justify-between gap-2"><span class="text-lg font-semibold tabular-nums">${Number(q.price).toLocaleString()}</span><span class="text-xs font-medium tabular-nums ${up?'text-up':'text-down'}">${up?'+':''}${q.changePct}%</span></div></div>`;}
+function tileView(q,flash=''){const up=q.changePct>=0;return `<a data-symbol="${esc(q.symbol)}" href="${esc(q.source)}" target="_blank" rel="noopener noreferrer" class="market-tile ${flash}"><div class="text-[11px] font-medium text-muted-foreground truncate">${esc(q.name||q.symbol)}</div><div class="flex items-baseline justify-between gap-2"><span class="text-lg font-semibold tabular-nums">${Number(q.price).toLocaleString()}</span><span class="text-xs font-medium tabular-nums ${up?'text-up':'text-down'}">${up?'+':''}${q.changePct}%</span></div></a>`;}
+function tileEdit(q,item,flash=''){const up=q.changePct>=0;return `<div data-symbol="${esc(item.symbol)}" draggable="true" class="market-tile cursor-move ${item.hidden?'opacity-50':''} ${flash}"><div class="flex items-center justify-between gap-1"><span class="text-[11px] font-medium text-muted-foreground truncate">⠿ ${esc(q.name||q.symbol)}</span><span class="flex items-center gap-0.5"><button data-hide="${esc(item.symbol)}" title="hide/show" class="btn btn-ghost h-5 w-5 p-0 text-xs leading-none">${item.hidden?'◉':'◌'}</button><button data-del="${esc(item.symbol)}" title="remove" class="btn btn-ghost h-5 w-5 p-0 text-xs leading-none text-destructive">✕</button></span></div><div class="flex items-baseline justify-between gap-2"><span class="text-lg font-semibold tabular-nums">${Number(q.price).toLocaleString()}</span><span class="text-xs font-medium tabular-nums ${up?'text-up':'text-down'}">${up?'+':''}${q.changePct}%</span></div></div>`;}
 
 function render(map,updatedAt){const el=$('[data-markets]');if(!el)return;const parts=[];
-  for(const item of layout){const q=map.get(item.symbol);if(!q)continue;if(item.hidden&&!edit)continue;parts.push(edit?tileEdit(q,item):tileView(q));}
+  for(const item of layout){const q=map.get(item.symbol);if(!q)continue;if(item.hidden&&!edit)continue;
+    const old=prevPrices.get(item.symbol);let flash='';
+    if(old!=null&&old!==q.price){flash=q.price>old?'flash-up':'flash-down';}
+    prevPrices.set(item.symbol,q.price);
+    parts.push(edit?tileEdit(q,item,flash):tileView(q,flash));}
   el.innerHTML=parts.join('')||`<p class="col-span-full text-xs text-muted-foreground">—</p>`;
   wireTiles();
   if(highlight){const t=el.querySelector(`[data-symbol="${highlight}"]`);if(t){t.classList.add('drop-target');setTimeout(()=>t.classList.remove('drop-target'),2500);}highlight=null;}
@@ -119,7 +124,7 @@ if(subForm){
     }catch(err){out.innerHTML='<div class="rounded-md border p-3 text-xs text-destructive">network error</div>';go.disabled=false;}});
 }
 
-/* ---------- read aloud (Web Speech API — free, on-device, ja/en/zh) ---------- */
+/* ---------- read aloud (Web Speech API — free, on-device, ja/en/zh with shadcn SVG icons) ---------- */
 (function(){
   const btns=$$('[data-speak]');
   if(!btns.length||!('speechSynthesis' in window))return;
@@ -128,15 +133,19 @@ if(subForm){
   const sep=LANG==='en'?'. ':'。';
   const STOP={en:'Stop',ja:'停止',zh:'停止'};
   const NONE={en:'Nothing to read',ja:'読み上げる内容がありません',zh:'暂无可朗读内容'};
-  // Prefer a male voice. The API has no gender field, so (1) match known male
-  // voice names, (2) else drop known female names, (3) else lower pitch a lot.
+  const ICON_SPEAK='<svg data-speak-icon class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>';
+  const ICON_STOP='<svg data-speak-icon class="h-3.5 w-3.5" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect width="18" height="18" x="3" y="3" rx="2"/></svg>';
+  const EQUALIZER_HTML='<span class="inline-flex items-end gap-0.5 h-3.5 w-3 pb-0.5"><span class="w-0.5 bg-primary rounded-full eq-bar-1" style="height:8px"></span><span class="w-0.5 bg-primary rounded-full eq-bar-2" style="height:12px"></span><span class="w-0.5 bg-primary rounded-full eq-bar-3" style="height:6px"></span></span>';
+
   const MALE={ja:['ichiro','otoya','takehiro','keita','naoki','kaito','male','男'],zh:['kangkang','yunyang','yunjian','yunxi','yunfeng','yunjie','yunye','kunkun','limu','li-mu','male','男'],en:['david','mark','guy','daniel','alex','fred','george','james','google uk english male','male']};
   const FEMALE={ja:['haruka','kyoko','nanami','ayumi','sayaka','female','女'],zh:['huihui','xiaoxiao','xiaoyi','xiaobei','xiaoni','xiaohan','xiaoqiu','xiaozhen','xiaoxuan','xiaomeng','yaoyao','ting-ting','tingting','mei-jia','meijia','sin-ji','female','女'],en:['zira','susan','samantha','karen','moira','tessa','fiona','victoria','female']};
   let queue=[],idx=0,active=false,gen=0;
+  let currentPlayingCard=null;
   const clean=s=>String(s).replace(/[↗→←·•|]/g,' ').replace(/\s+/g,' ').trim();
   const has=(v,list)=>{const n=String(v.name||'').toLowerCase();return list.some(x=>n.includes(x));};
   const voices=()=>{try{return synth.getVoices()||[];}catch(e){return [];}};
   try{synth.getVoices();}catch(e){}
+
   function pickVoice(){
     const pool=voices().filter(v=>v.lang&&v.lang.toLowerCase().startsWith(bcp.slice(0,2).toLowerCase()));
     if(!pool.length)return {voice:null,male:false};
@@ -149,31 +158,179 @@ if(subForm){
     if(neutral.length)return {voice:neutral[0],male:true};
     return {voice:pool.slice().sort(byLocal)[0]||null,male:false};
   }
+
+  function setActiveCard(card){
+    if(currentPlayingCard&&currentPlayingCard!==card){
+      currentPlayingCard.classList.remove('playing-card');
+      const slot=currentPlayingCard.querySelector('[data-eq-slot]');
+      if(slot){slot.innerHTML='';slot.classList.add('hidden');slot.classList.remove('inline-flex');}
+    }
+    currentPlayingCard=card;
+    if(card){
+      card.classList.add('playing-card');
+      const slot=card.querySelector('[data-eq-slot]');
+      if(slot){slot.innerHTML=EQUALIZER_HTML;slot.classList.remove('hidden');slot.classList.add('inline-flex');}
+      try{card.scrollIntoView({behavior:'smooth',block:'center'});}catch(e){}
+    }
+  }
+
+  function clearActiveCard(){
+    if(currentPlayingCard){
+      currentPlayingCard.classList.remove('playing-card');
+      const slot=currentPlayingCard.querySelector('[data-eq-slot]');
+      if(slot){slot.innerHTML='';slot.classList.add('hidden');slot.classList.remove('inline-flex');}
+      currentPlayingCard=null;
+    }
+  }
+
   function parts(card,t){const out=[clean(t.textContent)];const s=card.querySelector('[data-tts-summary]');if(s)out.push(clean(s.textContent));const r=card.querySelector('[data-tts-review]');if(r)out.push(clean(r.textContent));return out.filter(Boolean);}
-  function label(){btns.forEach(b=>{b.textContent=b.dataset.label;b.setAttribute('aria-pressed','false');});}
+  function label(){
+    btns.forEach(b=>{
+      b.innerHTML=`${ICON_SPEAK}<span data-speak-label>${b.dataset.label||'Listen'}</span>`;
+      b.setAttribute('aria-pressed','false');
+    });
+    clearActiveCard();
+  }
   function stop(){active=false;gen++;try{synth.cancel();}catch(e){}label();}
   function speak(g){
     if(!active||g!==gen)return;
     if(idx>=queue.length){active=false;return label();}
-    const sel=pickVoice();const u=new SpeechSynthesisUtterance(queue[idx]);
+    const item=queue[idx];
+    setActiveCard(item.card);
+    const sel=pickVoice();const u=new SpeechSynthesisUtterance(item.text);
     if(sel.voice)u.voice=sel.voice;
     u.lang=bcp;u.rate=sel.male?0.98:0.95;u.pitch=sel.male?1:0.55;
-    if(idx===0)console.log('[tts]',LANG,'picked:',sel.voice&&sel.voice.name,'maleKnown:',sel.male,'pitch:',u.pitch,'| available:',voices().filter(v=>(v.lang||'').toLowerCase().startsWith(bcp.slice(0,2).toLowerCase())).map(v=>v.name+'/'+v.lang).join(' ; '));
     const adv=()=>{if(active&&g===gen){idx++;setTimeout(()=>speak(g),60);}};
     u.onend=adv;u.onerror=adv;
     try{synth.resume();synth.speak(u);}catch(e){adv();}
   }
   function start(){
     const seen=new Set();queue=[];
-    $$('[data-tts-title]').forEach(t=>{const card=t.closest('.card')||t.parentElement;if(!card||seen.has(card))return;seen.add(card);const p=parts(card,t);if(p.length)queue.push(p.join(sep));});
+    $$('[data-tts-title]').forEach(t=>{const card=t.closest('.card')||t.parentElement;if(!card||seen.has(card))return;seen.add(card);const p=parts(card,t);if(p.length)queue.push({text:p.join(sep),card});});
     if(!queue.length){toast(NONE[LANG]||NONE.en);return;}
     try{synth.cancel();}catch(e){}
     idx=0;active=true;gen++;const g=gen;
-    btns.forEach(b=>{b.textContent='⏹ '+(STOP[LANG]||STOP.en);b.setAttribute('aria-pressed','true');});
+    btns.forEach(b=>{
+      b.innerHTML=`${ICON_STOP}<span data-speak-label>${STOP[LANG]||STOP.en}</span>`;
+      b.setAttribute('aria-pressed','true');
+    });
     if(voices().length)speak(g);
     else{let fired=false;const onv=()=>{if(fired||g!==gen)return;fired=true;speak(g);};try{synth.addEventListener('voiceschanged',onv);}catch(e){}setTimeout(onv,700);}
   }
-  btns.forEach(b=>{b.dataset.label=b.textContent;b.setAttribute('aria-pressed','false');
-    b.addEventListener('click',()=>{active?stop():start();});});
+  btns.forEach(b=>{
+    const lText=b.querySelector('[data-speak-label]')?.textContent||b.textContent.replace(/[^\w\u4e00-\u9fa5\u3040-\u309f\u30a0-\u30ff]/g,'').trim();
+    b.dataset.label=lText;
+    b.setAttribute('aria-pressed','false');
+    b.addEventListener('click',()=>{active?stop():start();});
+  });
   window.addEventListener('beforeunload',()=>{try{synth.cancel();}catch(e){}});
+})();
+
+/* ---------- keyboard power-user navigation ---------- */
+(function(){
+  let focusedCardIndex=-1;
+  function getVisibleCards(){
+    return $$('[data-event]:not([hidden])').filter(el=>{
+      const parent=el.closest('[data-board-section]');
+      return !parent||!parent.hidden;
+    });
+  }
+  function setCardFocus(idx){
+    const cards=getVisibleCards();
+    if(!cards.length)return;
+    cards.forEach(c=>c.classList.remove('card-focused'));
+    if(idx<0)idx=0;
+    if(idx>=cards.length)idx=cards.length-1;
+    focusedCardIndex=idx;
+    const target=cards[idx];
+    if(target){
+      target.classList.add('card-focused');
+      try{target.scrollIntoView({behavior:'smooth',block:'nearest'});}catch(e){}
+    }
+  }
+  function clearCardFocus(){
+    $$('.card-focused').forEach(c=>c.classList.remove('card-focused'));
+    focusedCardIndex=-1;
+  }
+
+  window.addEventListener('keydown',e=>{
+    const activeEl=document.activeElement;
+    const isTyping=activeEl&&(activeEl.tagName==='INPUT'||activeEl.tagName==='TEXTAREA'||activeEl.isContentEditable);
+
+    // Global / or Cmd+K to search
+    if((e.key==='/'&&!isTyping)||((e.metaKey||e.ctrlKey)&&e.key.toLowerCase()==='k')){
+      e.preventDefault();
+      const s=$('[data-search]')||$('input[type="search"]');
+      if(s){s.focus();s.select();}
+      return;
+    }
+
+    // Escape clears search / popovers / card focus
+    if(e.key==='Escape'){
+      if(isTyping){activeEl.blur();}
+      hideSuggest();
+      clearCardFocus();
+      return;
+    }
+
+    if(isTyping)return;
+
+    // 'j' / 'k' card navigation
+    if(e.key==='j'||e.key==='J'){
+      e.preventDefault();
+      const cards=getVisibleCards();
+      if(cards.length){setCardFocus(focusedCardIndex+1);}
+      return;
+    }
+    if(e.key==='k'||e.key==='K'){
+      e.preventDefault();
+      const cards=getVisibleCards();
+      if(cards.length){setCardFocus(focusedCardIndex<=0?0:focusedCardIndex-1);}
+      return;
+    }
+
+    // 'Enter' opens focused card url
+    if(e.key==='Enter'&&focusedCardIndex>=0){
+      const cards=getVisibleCards();
+      const target=cards[focusedCardIndex];
+      const url=target?.dataset.url||target?.querySelector('a[href]')?.getAttribute('href');
+      if(url){
+        e.preventDefault();
+        window.open(url,'_blank','noopener,noreferrer');
+      }
+      return;
+    }
+
+    // 'Space' toggles evidence details on focused card
+    if(e.key===' '&&focusedCardIndex>=0){
+      const cards=getVisibleCards();
+      const target=cards[focusedCardIndex];
+      const det=target?.querySelector('details');
+      if(det){
+        e.preventDefault();
+        det.open=!det.open;
+      }
+      return;
+    }
+
+    // 'l' / 'L' cycles language zh -> ja -> en -> zh
+    if(e.key==='l'||e.key==='L'){
+      const langs=['zh','ja','en'];
+      const nextLang=langs[(langs.indexOf(LANG)+1)%langs.length];
+      const curPath=window.location.pathname;
+      const newPath=curPath.replace(/^\/(zh|ja|en)/,'/'+nextLang);
+      if(newPath!==curPath){
+        window.location.href=newPath+window.location.search+window.location.hash;
+      }else{
+        window.location.href='/'+nextLang;
+      }
+      return;
+    }
+  });
+
+  document.addEventListener('click',e=>{
+    if(!e.target.closest('[data-event]')){
+      clearCardFocus();
+    }
+  });
 })();

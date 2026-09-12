@@ -24,7 +24,7 @@ export function parseFeed(raw) {
   return array(root.item||root.entry).map(i=>({
     title:plain(i.title?.['#text']||i.title),url:typeof i.link==='string'?i.link:array(i.link).find(x=>!x['@_rel']||x['@_rel']==='alternate')?.['@_href'],
     publishedAt:iso(i.date||i.pubDate||i.published||i.updated||i.issued),evidence:(()=>{for(const c of [i.content,i.summary,i.description]){const t=plain(c);if(t)return t.slice(0,1600);}return '';})(),
-  })).filter(i=>i.title&&i.url&&usableEvidence(i.evidence,i.title));
+  })).filter(i=>i.title&&i.url);
 }
 function event(source,category,item) {
   return {id:eventId(source,item.sourceId||item.url),source,category,title:item.title.slice(0,280),url:item.url,

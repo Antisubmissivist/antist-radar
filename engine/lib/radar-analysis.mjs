@@ -50,7 +50,15 @@ const ITEM_SYS=`あなたは日本語・英語・中国語の編集者です。�
 Return {"ja":{"items":[{"id":"...","title":"...","summary":"...","audience":"...","action":"...","unknowns":"..."}]},"en":{same shape},"zh":{same shape}}`;
 
 const DIGEST_SYS=`次の見出し一覧から、日本語・英語・中国語で短い総括を書く。各 ≤240 文字、数字・金額・日付なし。JSON のみ: {"ja":"...","en":"...","zh":"..."}`;
-const FORECAST_SYS=`新しく取得した市場クオートだけを使い、暗号資産を最大1つ・株式/指数を最大1つ、実験的な方向性仮説を作る。rationale は数字なし。JSON のみ: {"forecasts":[{"symbol":"...","direction":"above or below","probability":0.51,"horizonDays":7,"rationale":{"ja":"...","en":"...","zh":"..."}}]}`;
+const FORECAST_SYS=`最新の市場クオート（markets）と、直近の重要ニュース催化剤（catalysts: 銘柄やマクロに関連する最新の出来事）を結びつけ、暗号資産を最大1つ・株式/指数を最大1つ、因果関係に基づく明確な方向性仮説を作る。
+【ルール】
+1. 必ず catalysts の中にある実際のニュース・出来事（空売り開示、規制法案、金利・インフレ動向、AI/テック地殻変動、地政学など）を直接の根拠として銘柄を選び、rationale で言及すること。催化剤と無関係な根拠のない当て推量は禁止。
+2. 確率（probability）: 強い催化剤（大口の空売り開示、法的規制、重要政策変更など）がある場合は 0.65〜0.82 の高い確信度を設定。中程度のセンチメントの場合は 0.55〜0.64 を設定。0.51 の固定は厳禁。
+3. horizonDays: 3〜14（通常7）。
+4. direction: "above" または "below"（基准値に対して上回るか下回るか）。
+5. ⛔【超重要】rationale 内には半角・全角の数字（0-9、０-９）を一切含めないこと（数字を入れると検閲器でリジェクトされます。「基准値を下回る」「大幅な売り圧力」「調整局面」など言葉で表現すること）。ja/en/zhの3言語必須。
+6. symbol: 提供された markets 配列に含まれる symbol 文字列（例: "BTC-USD", "ETH-USD", "NVDA", "CL=F" など）をそのまま使用すること。
+JSON のみ: {"forecasts":[{"symbol":"NVDA","direction":"below","probability":0.74,"horizonDays":7,"rationale":{"ja":"...","en":"...","zh":"..."}}]}`;
 
 // Fan-out with bounded concurrency and per-batch retries; every batch must succeed
 // (the caller also checks coverage) so a board never silently loses its items.
@@ -86,15 +94,24 @@ export async function analyseRadar(events,markets){
   // scored by the persona; the code then takes the top 3 per board.
   const pool=sorted.slice(0,70);
   const picked=await selectByPersona(provider,pool);
+  const candidateSymbols=['BTC-USD','ETH-USD','SOL-USD','^GSPC','^IXIC','^N225','CL=F','GC=F','NVDA','MSFT','GOOGL','META','AVGO','TSM','AMD','PLTR','SMH','7203.T','6758.T'];
+  const freshMarkets=markets.filter(q=>Number.isFinite(q.price)&&q.price>0&&Date.now()-Date.parse(q.at)<5*86400000&&candidateSymbols.includes(q.symbol));
   const candidates=picked.length?picked:roundRobin(sorted,21);
-  const freshMarkets=markets.filter(q=>Date.now()-Date.parse(q.at)<3600000&&['BTC-USD','ETH-USD','SOL-USD','^GSPC','^IXIC','^N225','NVDA','MSFT','GOOGL','AVGO','TSM','7203.T'].includes(q.symbol));
+  const catalysts=candidates
+    .filter(c=>['stocks','crypto','ai','tech','geopolitics'].includes(c.category))
+    .slice(0,10)
+    .map(c=>({
+      category:c.category,
+      title:typeof c.title==='object'?(c.title.zh||c.title.en||Object.values(c.title)[0]):String(c.title||''),
+      evidence:String(c.evidence||'').slice(0,250)
+    }));
   let lastError;
   for(let attempt=1;attempt<=3;attempt++){
     try{
       const [lanes,dig,fc]=await Promise.all([
         runItems(provider,candidates),
-        (async()=>{for(let t=1;t<=2;t++){try{const r=await provider.complete(DIGEST_SYS,JSON.stringify(candidates.map(e=>({title:e.title,source:e.source,category:e.category}))),{maxTokens:3000,timeout:120000});const j=parseJson(r.text);if(j&&typeof j.ja==='string'&&typeof j.en==='string'&&typeof j.zh==='string')return j;}catch(e){console.error('[radar] digest attempt',t,'failed:',e.message);}}return null;})(),
-        (async()=>{for(let t=1;t<=2;t++){try{const r=await provider.complete(FORECAST_SYS,JSON.stringify({markets:freshMarkets}),{maxTokens:3000,timeout:120000});const j=parseJson(r.text);if(j&&Array.isArray(j.forecasts))return j;}catch(e){console.error('[radar] forecast attempt',t,'failed:',e.message);}}return null;})(),
+        (async()=>{for(let t=1;t<=2;t++){try{const r=await provider.complete(DIGEST_SYS,JSON.stringify(candidates.map(e=>({title:typeof e.title==='object'?(e.title.zh||e.title.en||Object.values(e.title)[0]):e.title,category:e.category}))),{maxTokens:8000,timeout:120000});const j=parseJson(r.text);if(j&&typeof j.ja==='string'&&typeof j.en==='string'&&typeof j.zh==='string')return j;}catch(e){console.error('[radar] digest attempt',t,'failed:',e.message);}}return null;})(),
+        (async()=>{for(let t=1;t<=2;t++){try{const r=await provider.complete(FORECAST_SYS,JSON.stringify({markets:freshMarkets,catalysts}),{maxTokens:6000,timeout:120000});const j=parseJson(r.text);if(j&&Array.isArray(j.forecasts))return j;}catch(e){console.error('[radar] forecast attempt',t,'failed:',e.message);}}return null;})(),
       ]);
       const have=new Set(lanes.en.map(i=>i&&i.id));
       const missing=candidates.filter(c=>!have.has(c.id));

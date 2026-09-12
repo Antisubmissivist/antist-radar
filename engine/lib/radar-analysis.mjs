@@ -85,6 +85,11 @@ export async function analyseRadar(events,markets){
       const have=new Set(lanes.en.map(i=>i&&i.id));
       const missing=candidates.filter(c=>!have.has(c.id));
       if(missing.length)throw new Error('Incomplete analysis: '+missing.length+' of '+candidates.length+' candidates missing');
+      // Drop "no content" cards: the model states the material lacks usable detail.
+      const NOCONTENT=/没有提供|未提供更多|细节(尚|还)未|尚未(确认|明确)|正文不完整|无法读取|无法确认|无法获取|信息不足|内容不完整|確認できません|確認できない|詳細は未|本文が不完全|insufficient (evidence|information)|no further details|not (yet )?(confirmed|available|known)|incomplete|unreadable|cannot be (confirmed|determined)/i;
+      const okInfo=r=>r&&!NOCONTENT.test([r.summary&&r.summary.zh,r.summary&&r.summary.ja,r.summary&&r.summary.en].filter(Boolean).join(' '));
+      const drop=new Set(lanes.en.filter(r=>!okInfo(r)).map(r=>r&&r.id).filter(Boolean));
+      if(drop.size){for(const l of ['ja','en','zh'])lanes[l]=lanes[l].filter(r=>r&&!drop.has(r.id));console.log(JSON.stringify({event:'dropped-no-content',count:drop.size,ids:[...drop]}));}
       const editionData={ja:{digest:dig&&dig.ja,items:lanes.ja},en:{digest:dig&&dig.en,items:lanes.en},zh:{digest:dig&&dig.zh,items:lanes.zh},forecasts:(fc&&fc.forecasts)||[]};
       await writeFile('runs/analysis-response.json',JSON.stringify({attempt,editionData}));
       const judged=judgeEdition(editionData,events,markets);

@@ -8,7 +8,8 @@ const array=v=>v==null?[]:Array.isArray(v)?v:[v];
 const textOf=v=>{if(v==null)return '';if(typeof v==='string')return v;if(Array.isArray(v))return v.map(textOf).filter(Boolean).join(' ');if(typeof v==='object'){for(const k of ['#text','div','p','body','_']){if(v[k]!=null){const t=textOf(v[k]);if(t)return t;}}return Object.values(v).map(textOf).filter(Boolean).join(' ');}return String(v);};
 export const plain=v=>{const s=textOf(v).trim();if(!s||s==='[object Object]')return '';try{return cheerio.load(s).text().replace(/\s+/g,' ').trim();}catch{return s.replace(/\s+/g,' ').trim();}};
 // An item is usable only if it carries real detail beyond its headline.
-export const usableEvidence=(evidence,title)=>{const t=String(evidence||'').replace(/\s+/g,' ').trim();if(!t||/\[object object\]/i.test(t))return false;if(t===String(title||'').replace(/\s+/g,' ').trim())return false;return t.length>=40;};
+const NOISE=/^(\s*(subscribe|sign ?in|sign ?up|log ?in|read more|share|advertisement|sponsored|all rights reserved|cookies?|accept all|privacy policy|terms of (use|service))\b)/i;
+export const usableEvidence=(evidence,title)=>{const t=String(evidence||'').replace(/\s+/g,' ').trim();if(!t||/\[object object\]/i.test(t))return false;if(t===String(title||'').replace(/\s+/g,' ').trim())return false;if(t.length<40)return false;if(NOISE.test(t))return false;return true;};
 const iso=v=>Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
 export async function request(url, type='text', headers={}) {
   const r=await fetch(url,{headers:{'User-Agent':'AntistRadar/1.0 (+https://radar.antist.ai)',...headers},signal:AbortSignal.timeout(18000)});

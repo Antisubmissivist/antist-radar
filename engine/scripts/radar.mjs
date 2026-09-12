@@ -23,7 +23,7 @@ const raw=feeds.flatMap(f=>f.items);
 function add(source,category,title,url,evidence,at=null,stableId=url) {if(!title||!url?.startsWith('https:'))return;raw.push({id:eventId(source,stableId),source,category,title:String(title).slice(0,280),url,publishedAt:at||null,fetchedAt:sweep.crucix.timestamp,stage:'announcement',deadlineAt:null,evidence:String(evidence||title).slice(0,1900),unknowns:'Applicability needs verification in the original source.'});}
 for(const a of (s.AIInfra?.hardSignals||[]).slice(0,8))add(a.from,'ai',a.title,a.url,a.title,a.at);
 for(const a of (s.GDELT?.allArticles||[]).slice(0,5))add('GDELT','geopolitics',a.title,a.url,a.title);
-for(const a of (s['CISA-KEV']?.vulnerabilities||[]).slice(0,5))add('CISA-KEV','japan-life',`${a.cveID}: ${a.vulnerabilityName}`,`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,`${a.vendorProject} ${a.product}. ${a.shortDescription||''}. ${a.requiredAction||''}. Federal remediation due date is not a deadline applying to every reader.`,null,a.cveID);
+for(const a of (s['CISA-KEV']?.vulnerabilities||[]).slice(0,5))add('CISA-KEV','tech',`${a.cveID}: ${a.vulnerabilityName}`,`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,`${a.vendorProject} ${a.product}. ${a.shortDescription||''}. ${a.requiredAction||''}. Federal remediation due date is not a deadline applying to every reader.`,null,a.cveID);
 const all=[...new Map(raw.map(x=>[x.id,x])).values()];
 // Drop items with no usable content (unreadable/missing extraction): only real news stays.
 const unique=all.filter(x=>usableEvidence(x.evidence,x.title));

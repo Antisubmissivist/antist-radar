@@ -51,7 +51,7 @@ export function buildMarkdown(s, lang = 'zh', boards) {
     const items = selectBoard(s.events, b, PER);
     out.push(`<details><summary>${EMOJI[b]} ${L[b]}（${items.length}）</summary>`, '');
     out.push('| 标题 | 内容 | 链接 |', '| --- | --- | --- |');
-    if (items.length) for (const e of items) { const dl = e.deadlineAt ? ('⏰ ' + String(e.deadlineAt).slice(0, 10) + ' · ') : ''; out.push(`| ${cut(e.title?.[lang], 40)} | ${cut(dl + (e.summary?.[lang] || e.action?.[lang]), 110)} | [链接](${e.url}) |`); }
+    if (items.length) for (const e of items) { const dl = e.deadlineAt ? ('⏰ ' + String(e.deadlineAt).slice(0, 10) + ' · ') : ''; out.push(`| ${cut(e.title?.[lang], 60)} | ${cut(dl + (e.summary?.[lang] || e.action?.[lang]), 110)} | [链接](${e.url}) |`); }
     else out.push(`| ${t.none} | — | — |`);
     out.push('', '</details>', '');
   }

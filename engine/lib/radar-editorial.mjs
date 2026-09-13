@@ -52,7 +52,16 @@ export function normalizeEvidence(evidence) {
 }
 
 // Fail closed on observable violations; this is not a substitute for source review.
-export function validateEditorial(value, {title=false, evidence=''}={}) {
+export function validateEditorial(value, {title=false, evidence='', optional=false}={}) {
+  // Optional fields (audience / unknowns / editor's take) may be dropped, but
+  // only in every language at once — a field present in ja and absent in en
+  // would make the three editions disagree about what is known. Blank in one
+  // language only is still a failure.
+  if (optional) {
+    const vals = ['ja','en','zh'].map(l => typeof value?.[l] === 'string' ? value[l].trim() : '');
+    if (vals.every(v => !v)) return;
+    if (vals.some(v => !v)) throw new Error('Optional field blank in some languages only');
+  }
   const evNorm = normalizeEvidence(evidence);
   for (const lang of ['ja','en','zh']) {
     const s=value?.[lang];

@@ -2,6 +2,7 @@ import config from '../crucix.config.mjs';
 import {createLLMProvider} from './llm/index.mjs';
 import {writeFile} from 'node:fs/promises';
 import {selectionSystemPrompt,PERSONA_EN} from './persona.mjs';
+import {sourceTier,TIER_RANK} from './source-tier.mjs';
 import {judgeEdition} from './radar-judge.mjs';
 
 const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
@@ -29,11 +30,24 @@ async function selectByPersona(provider,pool){
     const items=extractScoredItems(r.text);
     const byId=new Map(pool.map(e=>[e.id,e]));const scored=[];
     for(const row of items){const id=String((row&&row.id)||'');const e=byId.get(id);if(e&&!scored.includes(e)){e.score=Math.max(0,Math.min(100,Math.round(Number(row&&row.score)||0)));scored.push(e);}}
-    scored.sort((x,y)=>(y.score||0)-(x.score||0));
+    // Proximity to where the news broke is part of relevance, so it is scored,
+    // not bolted on after. For AI, X is the primary source — the labs and
+    // builders post there first and outlets rewrite it hours later — so an
+    // X-origin item outranks a media rewrite of that same item. It is a bonus
+    // rather than a hard sort on purpose: a 40-point tweet must still not bury
+    // a 90-point residency rule change (55 vs 90), but a 70-point original
+    // post now beats the 78-point article about it (85 vs 78).
+    const TIER_BONUS={x:15,primary:8,media:0,data:0};
+    for(const e of scored){
+      e.tier=sourceTier(e.source);
+      e.rank=Math.min(100,(e.score||0)+(TIER_BONUS[e.tier]||0));
+    }
+    scored.sort((x,y)=>(y.rank-x.rank)||(TIER_RANK[x.tier]-TIER_RANK[y.tier]));
     const per=new Map();const capped=[];
     const push=(e)=>{const n=per.get(e.category)||0;if(n>=3)return;per.set(e.category,n+1);capped.push(e);};
     const MIN_RELEVANCE=35;
     for(const e of scored){if((e.score||0)>=MIN_RELEVANCE)push(e);}
+    console.error('[radar] tiers picked: '+JSON.stringify(capped.reduce((m,e)=>((m[e.tier]=(m[e.tier]||0)+1),m),{})));
     console.error(`[radar] persona scored ${scored.length}, capped ${capped.length}/${pool.length}`);
     return capped;
   }catch(e){console.error('[radar] persona selection failed:',e.message);return [];}
@@ -44,9 +58,12 @@ const ITEM_SYS=`あなたは日本語・英語・中国語の編集者です。�
 - 与えられた候補 ID を EACH 言語版に必ず一度ずつ、与えられた順序どおりに含める。ID を捏造しない。
 - 資料にない事実を足さない。ja は日本語のみ、en は英語のみ、zh は簡体字中国語のみ。混ぜない。
 - title ≤100 文字、summary・audience・unknowns ≤160 文字、action ≤300 文字。
+- ⬛ audienceは【このニュースが当てはまる「状況」】だけを書く（例：「四月に給付金が更新される留学生」）。国籍・民族・居住地・年齢層などの属性ラベルは禁止。
+- ⬛ unknownsは【この記事に具体的に欠けている情報】のみ。汎用の注意書き（「適用条件を確認してください」等）は禁止。書くべき具体的な欠落がなければ "" （空文字列）。
 - 数字・金額・日付・バージョンは、与えられた資料（evidence）に直接明記されている場合のみ記述可（推測や捏造は厳禁）。action（本站评价）には数字を入れない。
 - action は「本站评价」: 最も合う一つの視点（現代世俗人文主義／逃避主義／AI本主義）を選び、2–4 文の純粋な評価を書く。命令・助言・行動指示は禁止。生活に即した比喩を一つ。視点名は書かない。
-- 読者像: ${PERSONA_EN}
+- action には【反証可能な判断】か【具体的な帰結】のどちらかを必ず含める。どちらも書けなければ "" （空文字列）。空欄は常識論より価値が高い。
+- 読者像（選定と語調のためだけに使う。本文に絶対に書かない）: ${PERSONA_EN}
 Return {"ja":{"items":[{"id":"...","title":"...","summary":"...","audience":"...","action":"...","unknowns":"..."}]},"en":{same shape},"zh":{same shape}}`;
 
 const DIGEST_SYS=`次の見出し一覧から、日本語・英語・中国語で短い総括を書く。各 ≤240 文字、数字・金額・日付なし。JSON のみ: {"ja":"...","en":"...","zh":"..."}`;
@@ -60,6 +77,73 @@ const FORECAST_SYS=`最新の市場クオート（markets）と、直近の重�
 6. symbol: 提供された markets 配列に含まれる symbol 文字列（例: "BTC-USD", "ETH-USD", "NVDA", "CL=F" など）をそのまま使用すること。
 JSON のみ: {"forecasts":[{"symbol":"NVDA","direction":"below","probability":0.74,"horizonDays":7,"rationale":{"ja":"...","en":"...","zh":"..."}}]}`;
 
+// Fields the reader is better off not seeing than seeing filled with filler.
+//
+// The persona exists to SELECT stories and pitch tone. It is not a fact about
+// any particular story, and it leaked: on 2026-09-13 twelve of twenty-one
+// English cards answered "who does this affect" with "Young Chinese readers in
+// Tokyo" — wrong for this site's audience and useless as an answer.
+const PERSONA_LEAK=/chinese|中国人|中国读者|華人|在日中国|中文读者|reader persona|读者画像|読者像/i;
+
+// "What remains unknown" earns a line only when it names what THIS story is
+// missing. Generic caution filled 11 of 21 cards, which trains readers to skip
+// the field entirely.
+const GENERIC_UNKNOWN=/(individual )?(eligibility|applicability).{0,40}(not been established|unclear|unknown)|have not been established|verify the official conditions|適用(条件|可否)[はが]?(不明|未確認)|資格.{0,6}不明|尚未确认.{0,6}(资格|适用)|适用性.{0,6}未(确认|确定)|请(核对|确认)(原文|官方)/i;
+
+
+/**
+ * Blank the three soft fields when they carry no information.
+ *
+ * Duplicate detection is the honest part: a sentence repeated across cards is
+ * boilerplate by definition, whatever it says. Judging whether a single
+ * "Editor's take" is vacuous is NOT something code can do reliably, so that
+ * constraint lives in the prompt and this only catches repeats and stubs.
+ */
+function scrubFields(lanes){
+  const stats={personaLeak:0,genericUnknown:0,duplicate:0,tooShort:0};
+  const txt=v=>typeof v==='string'?v.trim():'';
+  const LANGS=['ja','en','zh'];
+  const FIELDS=['audience','unknowns','action'];
+
+  // Duplicate counts are per language (the same idea repeats as a different
+  // sentence in each), but blanking is applied across all three: the judge now
+  // rejects a field that is present in one edition and blank in another.
+  const dupes={};
+  for(const l of LANGS){
+    dupes[l]={};
+    for(const f of FIELDS){
+      const m=new Map();
+      for(const it of lanes[l]||[]){const v=txt(it&&it[f]);if(v)m.set(v,(m.get(v)||0)+1);}
+      dupes[l][f]=m;
+    }
+  }
+
+  const byId=new Map();
+  for(const l of LANGS)for(const it of lanes[l]||[]){
+    if(!it||!it.id)continue;
+    const row=byId.get(it.id)||{};row[l]=it;byId.set(it.id,row);
+  }
+
+  for(const row of byId.values()){
+    for(const f of FIELDS){
+      let kill='';
+      for(const l of LANGS){
+        const v=txt(row[l]&&row[l][f]);
+        if(!v){kill=kill||'missing';continue;}
+        if(f==='audience'&&PERSONA_LEAK.test(v))kill=kill||'personaLeak';
+        else if(f==='unknowns'&&GENERIC_UNKNOWN.test(v))kill=kill||'genericUnknown';
+        else if(v.length<12)kill=kill||'tooShort';
+        else if((dupes[l][f].get(v)||0)>1)kill=kill||'duplicate';
+      }
+      if(!kill)continue;
+      if(stats[kill]!==undefined)stats[kill]++;
+      for(const l of LANGS)if(row[l])row[l][f]='';
+    }
+  }
+
+  if(Object.values(stats).some(Boolean))console.log(JSON.stringify({event:'scrubbed-filler',...stats}));
+  return lanes;
+}
 // Fan-out with bounded concurrency and per-batch retries; every batch must succeed
 // (the caller also checks coverage) so a board never silently loses its items.
 async function runItems(provider,candidates){
@@ -97,6 +181,9 @@ export async function analyseRadar(events,markets){
   const candidateSymbols=['BTC-USD','ETH-USD','SOL-USD','^GSPC','^IXIC','^N225','CL=F','GC=F','NVDA','MSFT','GOOGL','META','AVGO','TSM','AMD','PLTR','SMH','7203.T','6758.T'];
   const freshMarkets=markets.filter(q=>Number.isFinite(q.price)&&q.price>0&&Date.now()-Date.parse(q.at)<5*86400000&&candidateSymbols.includes(q.symbol));
   const candidates=picked.length?picked:roundRobin(sorted,21);
+  // The fallback path skips persona scoring, so tier is stamped here for every
+  // candidate regardless of how it was chosen.
+  for(const c of candidates)if(!c.tier)c.tier=sourceTier(c.source);
   const catalysts=candidates
     .filter(c=>['stocks','crypto','ai','tech','geopolitics'].includes(c.category))
     .slice(0,10)
@@ -121,6 +208,7 @@ export async function analyseRadar(events,markets){
       const okInfo=r=>r&&!NOCONTENT.test([r.summary&&r.summary.zh,r.summary&&r.summary.ja,r.summary&&r.summary.en].filter(Boolean).join(' '));
       const drop=new Set(lanes.en.filter(r=>!okInfo(r)).map(r=>r&&r.id).filter(Boolean));
       if(drop.size){for(const l of ['ja','en','zh'])lanes[l]=lanes[l].filter(r=>r&&!drop.has(r.id));console.log(JSON.stringify({event:'dropped-no-content',count:drop.size,ids:[...drop]}));}
+      scrubFields(lanes);
       const editionData={ja:{digest:dig&&dig.ja,items:lanes.ja},en:{digest:dig&&dig.en,items:lanes.en},zh:{digest:dig&&dig.zh,items:lanes.zh},forecasts:(fc&&fc.forecasts)||[]};
       await writeFile('runs/analysis-response.json',JSON.stringify({attempt,editionData}));
       const judged=judgeEdition(editionData,events,markets);

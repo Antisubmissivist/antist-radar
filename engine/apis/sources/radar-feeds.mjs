@@ -154,6 +154,14 @@ async function marketwatch() {
 export const FEEDS=[
   {name:'GitHub Releases',url:'https://docs.github.com/en/rest/releases/releases',collect:releases},
   {name:'ClawFeed',url:'https://clawfeed.kevinhe.io/',collect:clawfeed},
+  // X has no open API, so the only way to read where AI news actually breaks is
+  // through something that already scrapes it. AINews (smol.ai) publishes a
+  // near-daily recap of AI Twitter/Discord and links out to the original posts
+  // (54 x.com links in the issue checked on 2026-09-13), which makes it a pipe
+  // to a primary source rather than downstream reporting. Tiered accordingly in
+  // lib/source-tier.mjs.
+  {name:'AINews',url:'https://news.smol.ai/',collect:()=>feed('AINews','ai','https://news.smol.ai/rss.xml')},
+  {name:'Techmeme',url:'https://www.techmeme.com/',collect:()=>feed('Techmeme','tech','https://www.techmeme.com/feed.xml')},
   {name:'The Verge',url:'https://www.theverge.com/rss/index.xml',collect:()=>feed('The Verge','tech','https://www.theverge.com/rss/index.xml')},
   {name:'Ars Technica',url:'https://feeds.arstechnica.com/arstechnica/index',collect:()=>feed('Ars Technica','tech','https://feeds.arstechnica.com/arstechnica/index')},
   {name:'TechCrunch',url:'https://techcrunch.com/feed/',collect:()=>feed('TechCrunch','tech','https://techcrunch.com/feed/')},

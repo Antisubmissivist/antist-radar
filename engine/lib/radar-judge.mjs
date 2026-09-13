@@ -9,6 +9,9 @@ import {validateEditorial} from './radar-editorial.mjs';
 
 const CONTAM=/[\uac00-\ud7af]|本周|事业|半导体|主办/;
 const FIELDS=['title','summary','audience','action','unknowns'];
+// These three may be dropped entirely when the model has nothing specific to
+// say. An empty slot beats a sentence that is identical on every card.
+const OPTIONAL=new Set(['audience','action','unknowns']);
 
 export function judgeEdition(editionData,events,markets){
   const errors=[];
@@ -25,7 +28,7 @@ export function judgeEdition(editionData,events,markets){
     let bad=false;
     const evText=`${original.title} ${original.evidence}`;
     for(const k of FIELDS){
-      try{multilingual(row[k]);validateEditorial(row[k],{title:k==='title',evidence:k==='action'?'':evText});if(CONTAM.test(row[k].ja))throw new Error('ja contamination');}
+      try{multilingual(row[k]);validateEditorial(row[k],{title:k==='title',evidence:k==='action'?'':evText,optional:OPTIONAL.has(k)});if(CONTAM.test(row[k].ja))throw new Error('ja contamination');}
       catch(e){errors.push(`${k}[${row.id}]: ${e.message}`);bad=true;}
     }
     if(!bad)selected.push({...original,title:row.title,summary:row.summary,audience:row.audience,action:row.action,unknowns:row.unknowns});

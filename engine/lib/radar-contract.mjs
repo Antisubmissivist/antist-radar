@@ -43,6 +43,7 @@ export function publicSnapshot(input, privateValues = []) {
     audience:multilingual(e.audience,400), action:multilingual(e.action,600), unknowns:multilingual(e.unknowns,600),
     evidence:text(e.evidence,2000), change:choice(e.change,['new','updated','unchanged']),
     score:Math.max(0,Math.min(100,Math.round(Number(e.score)||0))),
+    tier:choice(e.tier||'data',['x','primary','media','data']),
   }));
   if (new Set(events.map(e=>e.id)).size!==events.length) throw new Error('Duplicate event');
   const markets=list(input.markets,50).map(q=>({symbol:text(q.symbol,24),name:text(q.name,80),price:number(q.price),changePct:number(q.changePct),at:timestamp(q.at),source:url(q.source)}));

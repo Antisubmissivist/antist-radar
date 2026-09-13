@@ -1,8 +1,15 @@
 // Judge: deterministic acceptance test for a model-generated edition. It does
 // NOT trust the model — it re-checks every field against the contract, the
-// supplied evidence IDs and the language rules. The caller retries on rejection
-// and, after bounded retries, aborts publication (the site then keeps the last
-// good snapshot), so a weak model cannot publish malformed content.
+// supplied evidence IDs and the language rules.
+//
+// A rejected ITEM is dropped, not fatal. It used to be: any error at all made
+// the whole edition unpublishable, so one card with an ungrounded number froze
+// the site for the hour while twenty good cards were thrown away with it. The
+// caller decides how much loss is acceptable (see analyseRadar); the judge only
+// reports what it dropped and why, and reserves `ok:false` for damage that
+// makes the edition unusable as a whole — a bad digest, or nothing left.
+//
+// Dropping is never silent: every dropped id and reason is returned and logged.
 
 import {LANGS,multilingual} from './radar-contract.mjs';
 import {validateEditorial} from './radar-editorial.mjs';
@@ -33,9 +40,9 @@ export function judgeEdition(editionData,events,markets){
     }
     if(!bad)selected.push({...original,title:row.title,summary:row.summary,audience:row.audience,action:row.action,unknowns:row.unknowns});
   }
-  if(!selected.length)errors.push('empty analysis');
+  let digestOk=true;
   try{multilingual(digest);validateEditorial(digest);if(CONTAM.test(digest.ja))throw new Error('ja digest contamination');}
-  catch(e){errors.push('digest: '+e.message);}
+  catch(e){errors.push('digest: '+e.message);digestOk=false;}
   // Forecasts are per-board and optional: a bad one is dropped, never fatal.
   const forecasts=[];
   for(const f of (editionData?.forecasts||[])){
@@ -54,5 +61,8 @@ export function judgeEdition(editionData,events,markets){
         zh:`截至 ${d}（${horizon}天内）：${q.symbol} 预计${above?'突破或站稳':'跌破'}基准价 ${q.price}。`
       },rationale:f.rationale,evidence:[q.source]});
   }
-  return {ok:errors.length===0,errors,result:{digest,events:selected,forecasts}};
+  // `ok` means "usable at all". Per-item losses are reported in `errors` and
+  // weighed by the caller against how many candidates went in.
+  return {ok:digestOk&&selected.length>0,digestOk,errors,dropped:items.length-selected.length,analysed:items.length,
+    result:{digest,events:selected,forecasts}};
 }

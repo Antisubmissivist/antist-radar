@@ -171,6 +171,12 @@ async function runItems(provider,candidates){
   return lanes;
 }
 
+// How much of an edition may be lost and still be worth publishing. 80% keeps a
+// normal day (1-2 bad cards out of ~20) publishing immediately; anything worse
+// is retried first and only accepted on the final attempt.
+const KEEP_RATIO=0.8;
+const MIN_KEPT=3;
+
 export async function analyseRadar(events,markets){
   const provider=createLLMProvider({...config.llm,provider:process.env.RADAR_LLM_PROVIDER||config.llm.provider,model:process.env.RADAR_LLM_MODEL||config.llm.model});if(!provider?.isConfigured)throw new Error('Analysis provider unavailable');
   const sorted=[...events].sort((a,b)=>Date.parse(b.publishedAt||b.fetchedAt)-Date.parse(a.publishedAt||a.fetchedAt));
@@ -212,8 +218,19 @@ export async function analyseRadar(events,markets){
       const editionData={ja:{digest:dig&&dig.ja,items:lanes.ja},en:{digest:dig&&dig.en,items:lanes.en},zh:{digest:dig&&dig.zh,items:lanes.zh},forecasts:(fc&&fc.forecasts)||[]};
       await writeFile('runs/analysis-response.json',JSON.stringify({attempt,editionData}));
       const judged=judgeEdition(editionData,events,markets);
+      // Unusable as a whole (bad digest, or nothing survived) — always retry.
       if(!judged.ok)throw new Error('Judge rejected: '+judged.errors.slice(0,3).join(' | '));
-      return {...judged.result,usage:null};
+
+      // Partial losses are tolerated rather than fatal: one card with an
+      // ungrounded number should not cost the reader the other twenty. Retry
+      // while the loss is large, but on the last attempt publish what survived
+      // rather than leaving the site frozen on yesterday's snapshot.
+      const kept=judged.result.events.length;
+      const need=Math.max(MIN_KEPT,Math.ceil(candidates.length*KEEP_RATIO));
+      if(kept<need&&attempt<3)throw new Error(`Thin edition: kept ${kept}/${candidates.length}, need ${need} — ${judged.errors.slice(0,2).join(' | ')}`);
+
+      if(judged.dropped>0)console.log(JSON.stringify({event:'partial-edition',kept,analysed:judged.analysed,dropped:judged.dropped,attempt,reasons:judged.errors.slice(0,6)}));
+      return {...judged.result,status:judged.dropped>0?'degraded':'complete',usage:null};
     }catch(e){lastError=e;console.error(`[radar] analysis attempt ${attempt}/3 rejected: ${e.message}`);}
   }
   throw lastError;

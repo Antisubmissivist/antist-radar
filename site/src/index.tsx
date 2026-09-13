@@ -2,6 +2,10 @@ import {Hono} from 'hono';
 import {html} from 'hono/html';
 import {publicSnapshot,resolveForecast} from '../../engine/lib/radar-contract.mjs';
 import {ORIGIN,languages,titles,descriptions,type Locale,jsonLd} from './seo';
+// Tier is a pure function of the source name, so it is computed at render time
+// rather than read from the row. Archived events predate the field and would
+// otherwise show no badge, making the same source look different by age.
+import {sourceTier} from '../../engine/lib/source-tier.mjs';
 import {sendDigest,buildMarkdown,selectBoard} from './delivery';
 import {getMarkets,setWatchlist,searchSymbols} from './markets';
 type Bindings=Env & {RADAR_INGEST_TOKEN:string;TELEGRAM_BOT_TOKEN?:string;TELEGRAM_CHAT_ID?:string;GH_DISPATCH_TOKEN?:string;TG_WEBHOOK_SECRET?:string};
@@ -37,6 +41,7 @@ function RadarEmptyState({b,l,w,count}:{b:string;l:Locale;w:Record<string,string
 function EventCard({e,index,l,w}:{e:any;index:number;l:Locale;w:Record<string,string>}){
   const score=Number(e.score||0);
   const isHigh=score>=85;
+  const tier=sourceTier(e.source);
   return <article data-event data-category={e.category} data-id={e.id} data-url={e.url} class={`card card-hover p-5 animate-in relative ${isHigh?'border-primary/40 shadow-xs':''}`}>
     <div class="flex items-center justify-between mb-3">
       <div class="flex items-center gap-2">
@@ -54,7 +59,7 @@ function EventCard({e,index,l,w}:{e:any;index:number;l:Locale;w:Record<string,st
         )}
       </div>
       <span class="flex items-center gap-1.5 ml-3 min-w-0">
-        {e.tier&&e.tier!=='data'?<span class={`badge text-[9px] tracking-wide shrink-0 ${e.tier==='x'?'border-primary/50 bg-primary/10 text-foreground font-semibold':'badge-outline text-muted-foreground'}`} title={w[`tierWhy_${e.tier}`]}>{w[`tier_${e.tier}`]}</span>:null}
+        {tier!=='data'?<span class={`badge text-[9px] tracking-wide shrink-0 ${tier==='x'?'border-primary/50 bg-primary/10 text-foreground font-semibold':'badge-outline text-muted-foreground'}`} title={w[`tierWhy_${tier}`]}>{w[`tier_${tier}`]}</span>:null}
         <span class="text-[11px] text-muted-foreground truncate">{e.source}</span>
       </span>
     </div>

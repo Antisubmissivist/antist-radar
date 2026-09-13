@@ -2,7 +2,7 @@ name: Deploy radar
 on:
   push:
     branches: [main]
-    paths: ['site/**', 'engine/lib/radar-contract*', 'package*.json', '.github/workflows/deploy.yml']
+    paths: ['site/**', 'engine/lib/**', 'package*.json', '.github/workflows/deploy.yml']
   workflow_dispatch:
 permissions:
   contents: read

@@ -331,8 +331,8 @@ app.post('/api/ingest',async c=>{
   // ON CONFLICT clause below deliberately leaves thread_id and thread_terms
   // alone, so an event keeps the timeline it was first placed in.
   const since=new Date(Date.now()-WINDOW_DAYS*86400000).toISOString();
-  const hist=await c.env.DB.prepare('SELECT thread_id,thread_terms,first_seen FROM events WHERE thread_id IS NOT NULL AND first_seen>=? ORDER BY first_seen DESC LIMIT 600').bind(since).all();
-  const history=(hist.results||[]).map((r:any)=>({threadId:String(r.thread_id),terms:parseTerms(r.thread_terms),at:String(r.first_seen)}));
+  const hist=await c.env.DB.prepare('SELECT thread_id,thread_terms,source,first_seen FROM events WHERE thread_id IS NOT NULL AND first_seen>=? ORDER BY first_seen DESC LIMIT 600').bind(since).all();
+  const history=(hist.results||[]).map((r:any)=>({threadId:String(r.thread_id),terms:parseTerms(r.thread_terms),source:String(r.source),at:String(r.first_seen)}));
   const common=commonTerms(history);
   const threadOf=new Map<string,{id:string;terms:string}>();
   for(const e of (s.events||[])){
@@ -340,7 +340,7 @@ app.post('/api/ingest',async c=>{
     // Later events in the same sweep can continue a thread opened earlier in it.
     const id=pickThread(terms,nowIso,history,common)||`t${e.id.slice(0,12)}`;
     threadOf.set(e.id,{id,terms:serializeTerms(terms)});
-    history.push({threadId:id,terms,at:nowIso});
+    history.push({threadId:id,terms,source:String(e.source||''),at:nowIso});
   }
 
   const evStmts=(s.events||[]).map(e=>c.env.DB.prepare('INSERT INTO events (id,source,category,url,published_at,first_seen,last_seen,stage,deadline_at,change,title_json,summary_json,audience_json,action_json,unknowns_json,evidence,score,thread_id,thread_terms) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen,source=excluded.source,category=excluded.category,url=excluded.url,published_at=excluded.published_at,stage=excluded.stage,deadline_at=excluded.deadline_at,change=excluded.change,title_json=excluded.title_json,summary_json=excluded.summary_json,audience_json=excluded.audience_json,action_json=excluded.action_json,unknowns_json=excluded.unknowns_json,evidence=excluded.evidence,score=excluded.score').bind(e.id,e.source,e.category,e.url,e.publishedAt||null,nowIso,nowIso,e.stage||null,e.deadlineAt||null,e.change||null,JSON.stringify(e.title),JSON.stringify(e.summary),JSON.stringify(e.audience),JSON.stringify(e.action),JSON.stringify(e.unknowns),e.evidence,e.score||0,threadOf.get(e.id)?.id||null,threadOf.get(e.id)?.terms||null));

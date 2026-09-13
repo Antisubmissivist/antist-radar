@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { salientTerms, isContinuation, pickThread, commonTerms, overlap } from '../lib/story-thread.mjs';
+import { salientTerms, eventTerms, isContinuation, pickThread, commonTerms, overlap, threadCore } from '../lib/story-thread.mjs';
 
 // Every headline below was taken off radar.antist.ai on 2026-09-13 rather than
 // invented, because the thresholds are only meaningful against the shape of
@@ -95,4 +95,33 @@ test('commonTerms measures the corpus instead of trusting a fixed list', () => {
   const c = commonTerms(many);
   assert.ok(c.has('acme'), 'a term in every headline identifies nothing here');
   assert.ok(c.has('ai'), 'the cold-start list is still applied');
+});
+
+test('event terms come from the headline only, not the body', () => {
+  // Measured on 277 live events: adding evidence text raised multi-step threads
+  // from 23 to 40, and the extra links were false — body text drags in every
+  // name a report mentions in passing. This pins the decision down.
+  const t = eventTerms({
+    title: { en: 'Saudi Arabia shuts critical oil pipeline after drone attack' },
+    evidence: 'Analysts at Goldman Sachs compared the move to Nvidia and OpenAI supply shocks.',
+  });
+  assert.ok(t.has('saudi'));
+  assert.ok(!t.has('nvidia'), 'a name mentioned only in the body must not become identity');
+  assert.ok(!t.has('goldman'));
+});
+
+test('POISON: a thread grows along its core, not along its last member', () => {
+  // Single-linkage chaining is how "Anthropic asks to slow AI" and "Altman says
+  // no IPO this year" ended up on one live timeline: one off-topic item joined
+  // and then acted as a magnet for its own subject.
+  const now = Date.now();
+  const iso = (d) => new Date(now - d * 86400000).toISOString();
+  const core = ['Houthis tighten grip on Red Sea shipping', 'Houthis advance in Yemen near the Red Sea', 'Houthis claim Red Sea coast in Yemen'];
+  const history = core.map((t) => ({ threadId: 't-redsea', terms: salientTerms(t), at: iso(1), source: 'BBC World' }));
+  // An item sharing two words with ONE member but not with what the thread is about.
+  history.push({ threadId: 't-redsea', terms: salientTerms('Yemen Airways resumes Red Sea route bookings'), at: iso(1), source: 'BBC World' });
+
+  assert.equal(pickThread(salientTerms('Houthis seize Mayun Island in the Red Sea'), iso(0), history), 't-redsea');
+  assert.equal(pickThread(salientTerms('Yemen Airways adds new bookings system'), iso(0), history), null,
+    'the off-topic member must not pull its own subject into the thread');
 });

@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { validateEditorial } from '../lib/radar-editorial.mjs';
 import { sourceTier, TIER_RANK } from '../lib/source-tier.mjs';
+import { PERSONA_LEAK, GENERIC_UNKNOWN } from '../lib/radar-analysis.mjs';
 
 // "Who it affects", "What remains unknown" and the editor's take are allowed to
 // be empty, because a sentence repeated on every card teaches readers to skip
@@ -59,4 +60,38 @@ test('the tier bonus lifts an origin post over a rewrite, but never over a major
   assert.ok(rank(70, 'x') > rank(78, 'media'));
   // A 40-point tweet must NOT bury a 90-point residency rule change.
   assert.ok(rank(40, 'x') < rank(90, 'primary'));
+});
+
+// The six live variants of the same non-statement, measured in D1 on
+// 2026-09-13 (139 of 276 events). The first version of this guard only caught
+// the exact phrase "have not been established" and would have missed four of
+// them, so the shapes are pinned here rather than left to one example.
+test('the boilerplate-unknowns guard catches every live variant and spares specifics', () => {
+  for (const v of [
+    'Individual eligibility and applicability have not been established.',
+    'Eligibility and applicability have not been established.',
+    'Individual eligibility and how the rules apply have not yet been established.',
+    'Individual eligibility and applicability are not established.',
+    'Applicability needs verification in the original source.',
+    'Individual eligibility and applicability remain unestablished.',
+  ]) assert.ok(GENERIC_UNKNOWN.test(v), 'should be caught as boilerplate: ' + v);
+
+  // These name what THIS story is missing and must survive.
+  for (const v of [
+    'Price, release timing, supported software and availability in Japan are not established.',
+    'The affected version range and whether a fixed release shipped.',
+    'The eligibility cutoff date is not given in the release.',
+  ]) assert.ok(!GENERIC_UNKNOWN.test(v), 'should be kept as specific: ' + v);
+});
+
+test('the persona guard catches the wording that actually shipped', () => {
+  for (const v of [
+    'Young Chinese readers in Tokyo interested in AI, startups, and technology.',
+    'A Chinese reader in Tokyo into AI, startups, tech and current affairs.',
+  ]) assert.ok(PERSONA_LEAK.test(v), 'should be caught as persona leak: ' + v);
+
+  for (const v of [
+    'Anyone on a student visa whose JASSO stipend renews in April.',
+    'Holders of the discontinued top tier, at their next renewal.',
+  ]) assert.ok(!PERSONA_LEAK.test(v), 'should be kept: ' + v);
 });

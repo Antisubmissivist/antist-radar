@@ -83,12 +83,12 @@ JSON のみ: {"forecasts":[{"symbol":"NVDA","direction":"below","probability":0.
 // any particular story, and it leaked: on 2026-09-13 twelve of twenty-one
 // English cards answered "who does this affect" with "Young Chinese readers in
 // Tokyo" — wrong for this site's audience and useless as an answer.
-const PERSONA_LEAK=/chinese|中国人|中国读者|華人|在日中国|中文读者|reader persona|读者画像|読者像/i;
+export const PERSONA_LEAK=/chinese|中国人|中国读者|華人|在日中国|中文读者|reader persona|读者画像|読者像/i;
 
 // "What remains unknown" earns a line only when it names what THIS story is
 // missing. Generic caution filled 11 of 21 cards, which trains readers to skip
 // the field entirely.
-const GENERIC_UNKNOWN=/(individual )?(eligibility|applicability).{0,40}(not been established|unclear|unknown)|have not been established|verify the official conditions|適用(条件|可否)[はが]?(不明|未確認)|資格.{0,6}不明|尚未确认.{0,6}(资格|适用)|适用性.{0,6}未(确认|确定)|请(核对|确认)(原文|官方)/i;
+export const GENERIC_UNKNOWN=/(eligibility|applicability)[^.]{0,80}(been established|not established|unestablished|needs verification|require[sd]? verification|unclear|unknown)|verify the official conditions|適用(条件|可否)[はが]?(不明|未確認)|個別の(適用|資格).{0,20}未(確認|定)|尚未确认[^。]{0,20}(资格|适用)|(资格|适用性)[^。]{0,20}尚?未(确认|确定|建立)|请(核对|确认)(原文|官方)/i;
 
 
 /**

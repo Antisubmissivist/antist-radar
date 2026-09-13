@@ -21,13 +21,34 @@ const cut = (s, n) => { const t = cell(s); return t.length > n ? t.slice(0, n - 
 const jst = iso => new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0, 10);
 const pick = (lang) => (LABEL[lang] || LABEL.zh);
 
+// Single source of truth for "which 3 items represent this board", shared by the
+// site homepage and the Telegram digest so the two can never disagree.
+export function rankScore(score, dateStr, now = Date.now()) {
+  const s = Number(score) || 0;
+  if (s < 60) return -1;
+  const ts = Date.parse(dateStr || '') || now;
+  const ageHours = Math.max(0, (now - ts) / 3600000);
+  return s / Math.pow(ageHours / 48 + 1, 1.2);
+}
+export function selectBoard(events, board, n = 3, now = Date.now()) {
+  const cand = (events || []).filter(e => e && e.category === board);
+  const ranked = cand.filter(e => (Number(e.score) || 0) >= 60)
+    .map(e => ({ e, r: rankScore(e.score, e.publishedAt || e.fetchedAt, now) }))
+    .filter(x => x.r > 0).sort((a, b) => b.r - a.r).slice(0, n).map(x => x.e);
+  const have = new Set(ranked.map(e => e.id));
+  const fallback = ranked.length < n ? cand.filter(e => !have.has(e.id))
+    .sort((a, b) => Date.parse(b.publishedAt || b.fetchedAt || 0) - Date.parse(a.publishedAt || a.fetchedAt || 0))
+    .slice(0, n - ranked.length) : [];
+  return [...ranked, ...fallback];
+}
+
 export function buildMarkdown(s, lang = 'zh', boards) {
   const L = pick(lang), t = T[lang] || T.zh;
   const list = (Array.isArray(boards) && boards.length) ? BOARDS.filter(b => boards.includes(b)) : BOARDS;
   const out = [`**${t.title} · ${jst(s.generatedAt)}**`, '', cut(s.digest?.[lang], 500), ''];
   const PER = 3;
   for (const b of list) {
-    const items = (s.events || []).filter(e => e.category === b).sort((x, y) => (y.score || 0) - (x.score || 0)).slice(0, PER);
+    const items = selectBoard(s.events, b, PER);
     out.push(`<details><summary>${EMOJI[b]} ${L[b]}（${items.length}）</summary>`, '');
     out.push('| 标题 | 内容 | 链接 |', '| --- | --- | --- |');
     if (items.length) for (const e of items) { const dl = e.deadlineAt ? ('⏰ ' + String(e.deadlineAt).slice(0, 10) + ' · ') : ''; out.push(`| ${cut(e.title?.[lang], 40)} | ${cut(dl + (e.summary?.[lang] || e.action?.[lang]), 110)} | [链接](${e.url}) |`); }
@@ -47,7 +68,7 @@ export function buildPlain(s, lang = 'zh', boards) {
   const L = pick(lang), t = T[lang] || T.zh;
   const list = (Array.isArray(boards) && boards.length) ? BOARDS.filter(b => boards.includes(b)) : BOARDS;
   const lines = [`${t.title} · ${jst(s.generatedAt)}`, '', cell(s.digest?.[lang]), ''];
-  for (const b of list) { const items = (s.events || []).filter(e => e.category === b).sort((x, y) => (y.score || 0) - (x.score || 0)).slice(0, 3); lines.push(`${EMOJI[b]} ${L[b]}（${items.length}）`); for (const e of items) lines.push(`· ${cell(e.title?.[lang])} — ${e.url}`); }
+  for (const b of list) { const items = selectBoard(s.events, b, 3); lines.push(`${EMOJI[b]} ${L[b]}（${items.length}）`); for (const e of items) lines.push(`· ${cell(e.title?.[lang])} — ${e.url}`); }
   lines.push('', `${t.forecast}`); for (const f of (s.forecasts || []).slice(0, 10)) lines.push(`· ${f.symbol} ${f.direction} ${Math.round(Number(f.probability) * 100)}% ${f.dueAt.slice(0, 10)}`);
   lines.push('', `📡 ${t.more} → https://radar.antist.ai/${lang}`);
   return lines.join('\n');

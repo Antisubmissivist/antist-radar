@@ -42,8 +42,53 @@ const delta=changes(unique,previous);
 // 10-day window: keep the candidate pool bounded so scoring stays fast.
 const cutoff=Date.now()-10*86400000;
 const analysis=await analyseRadar(delta.events.filter(e=>eligibility(e)!=='ineligible'&&Date.parse(e.publishedAt||e.fetchedAt||0)>=cutoff),markets);
-const known={YFinance:'https://finance.yahoo.com/',AIInfra:'https://news.ycombinator.com/',Japan:'https://www.jma.go.jp/',FX:'https://www.frankfurter.app/',GDELT:'https://www.gdeltproject.org/','CISA-KEV':'https://www.cisa.gov/known-exploited-vulnerabilities-catalog'};
-const health=sweep.health;const sources=Object.keys(sweep.timing||{}).filter(n=>n!=='Positions').map(name=>({name,url:known[name]||'https://github.com/calesthio/Crucix',fetchedAt:sweep.crucix.timestamp,status:health.ok.includes(name)?'ok':health.dead.some(x=>x.name===name)?'unavailable':'degraded',count:0}));
+// Reader-facing home of every sweep source, derived from the endpoint each
+// module actually calls (see engine/apis/sources/*.mjs). A source missing from
+// this table gets NO link rather than a fallback: pointing "NOAA" at the Crucix
+// repo is a false attribution on a site whose entire claim is primary sources.
+const known={
+  GDELT:'https://www.gdeltproject.org/',
+  OpenSky:'https://opensky-network.org/',
+  FIRMS:'https://firms.modaps.eosdis.nasa.gov/',
+  Maritime:'https://aisstream.io/',
+  Safecast:'https://safecast.org/',
+  ACLED:'https://acleddata.com/',
+  ReliefWeb:'https://reliefweb.int/',
+  WHO:'https://www.who.int/emergencies/disease-outbreak-news',
+  OFAC:'https://ofac.treasury.gov/recent-actions',
+  OpenSanctions:'https://www.opensanctions.org/',
+  FRED:'https://fred.stlouisfed.org/',
+  Treasury:'https://fiscaldata.treasury.gov/',
+  BLS:'https://www.bls.gov/',
+  EIA:'https://www.eia.gov/',
+  GSCPI:'https://www.newyorkfed.org/research/policy/gscpi',
+  Comtrade:'https://comtradeplus.un.org/',
+  NOAA:'https://www.weather.gov/',
+  Bluesky:'https://bsky.app/',
+  Reddit:'https://www.reddit.com/',
+  Telegram:'https://t.me/',
+  Space:'https://celestrak.org/',
+  YFinance:'https://finance.yahoo.com/',
+  'CISA-KEV':'https://www.cisa.gov/known-exploited-vulnerabilities-catalog',
+  'Cloudflare-Radar':'https://radar.cloudflare.com/',
+  Japan:'https://www.jma.go.jp/',
+  FX:'https://finance.yahoo.com/',            // fx.mjs calls query1.finance.yahoo.com, not frankfurter
+  AIInfra:'https://news.ycombinator.com/',
+};
+// `count` is the real record count from the health audit. It used to be a
+// hardcoded 0, which made the public "N/M healthy" headline unfalsifiable:
+// a dead feed and a quiet day both rendered as a green "ok · 0".
+const health=sweep.health;
+const sources=Object.keys(sweep.timing||{}).filter(n=>n!=='Positions').map(name=>({
+  name,
+  url:known[name]||null,
+  fetchedAt:sweep.crucix.timestamp,
+  status:health.ok.includes(name)?'ok'
+    :(health.quiet||[]).includes(name)?'quiet'
+    :health.dead.some(x=>x.name===name)?'unavailable'
+    :'degraded',
+  count:(health.counts||{})[name]??0,
+}));
 sources.push(...feeds.map(f=>({name:f.name,url:f.url,fetchedAt:f.fetchedAt,status:f.status,count:f.items.length})));
 const candidate={schema:2,id:createHash('sha256').update(now).digest('hex').slice(0,24),generatedAt:now,sweepMs,analysisStatus:'complete',digest:analysis.digest,events:analysis.events,markets,sources,forecasts:analysis.forecasts};
 // Diagnose a private-value collision without printing the value itself.

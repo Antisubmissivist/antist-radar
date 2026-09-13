@@ -55,35 +55,60 @@ function payloadIsEmpty(data) {
 }
 
 /**
+ * How many records a source actually returned this sweep.
+ *
+ * The public site prints this next to each source, so it must be the real
+ * count or not be shown at all: a hardcoded 0 beside a green "ok" is worse
+ * than no number, because a reader cannot tell a quiet day from a dead feed.
+ *
+ * Scalar-only payloads (a quote map, a single index reading) carry data but
+ * no array, so they report 1 rather than 0.
+ */
+export function countRecords(data) {
+  if (!data || typeof data !== 'object') return 0;
+  const arrays = dataArrays(data);
+  if (arrays.length === 0) return 1;
+  return arrays.reduce((n, a) => n + a.length, 0);
+}
+
+/**
  * @param {object} briefing output of fullBriefing()
- * @returns {{ok:string[], degraded:object[], dead:object[], trueOkCount:number, report:string}}
+ * @returns {{ok:string[], quiet:string[], degraded:object[], dead:object[], counts:object, trueOkCount:number, total:number, report:string}}
  */
 export function auditSources(briefing) {
   const ok = [];
+  const quiet = [];
   const degraded = [];
+  const counts = {};
   const dead = (briefing.errors || []).map(e => ({ name: e.name, reason: e.error }));
 
   for (const [name, data] of Object.entries(briefing.sources || {})) {
     const errs = findErrors(data);
     const empty = payloadIsEmpty(data);
+    counts[name] = empty ? 0 : countRecords(data);
 
     if (errs.length) {
       degraded.push({ name, reason: errs.join(' | '), kind: 'error-in-payload' });
-    } else if (empty && !QUIET_OK.has(name)) {
+    } else if (empty && QUIET_OK.has(name)) {
+      // Legitimately empty today. Kept OUT of `ok` so "N sources with data"
+      // can never count a source that returned nothing.
+      quiet.push(name);
+    } else if (empty) {
       degraded.push({ name, reason: '返回成功但所有数据数组为空', kind: 'empty' });
     } else {
       ok.push(name);
     }
   }
 
-  const total = ok.length + degraded.length + dead.length;
+  const total = ok.length + quiet.length + degraded.length + dead.length;
   const lines = [
     `真实健康度: ${ok.length}/${total} 正常` +
+      (quiet.length ? ` · ${quiet.length} 安静(允许为空)` : '') +
       (degraded.length ? ` · ${degraded.length} 降级` : '') +
       (dead.length ? ` · ${dead.length} 失败` : ''),
   ];
   for (const d of degraded) lines.push(`  ⚠️ ${d.name} — ${d.reason}`);
   for (const d of dead) lines.push(`  ❌ ${d.name} — ${d.reason}`);
 
-  return { ok, degraded, dead, trueOkCount: ok.length, total, report: lines.join('\n') };
+  return { ok, quiet, degraded, dead, counts, trueOkCount: ok.length, total, report: lines.join('\n') };
 }

@@ -22,24 +22,17 @@ const jst = iso => new Date(Date.parse(iso) + 9 * 3600000).toISOString().slice(0
 const pick = (lang) => (LABEL[lang] || LABEL.zh);
 
 // Single source of truth for "which 3 items represent this board", shared by the
-// site homepage and the Telegram digest so the two can never disagree.
-export function rankScore(score, dateStr, now = Date.now()) {
-  const s = Number(score) || 0;
-  if (s < 60) return -1;
-  const ts = Date.parse(dateStr || '') || now;
-  const ageHours = Math.max(0, (now - ts) / 3600000);
-  return s / Math.pow(ageHours / 48 + 1, 1.2);
-}
-export function selectBoard(events, board, n = 3, now = Date.now()) {
+// site homepage and the Telegram digest so the two can never disagree. Ordered by
+// relevance score (highest first; ties broken by recency). Items without a score
+// (legacy archive rows) only fill the remaining slots, newest first.
+export function selectBoard(events, board, n = 3) {
   const cand = (events || []).filter(e => e && e.category === board);
-  const ranked = cand.filter(e => (Number(e.score) || 0) >= 60)
-    .map(e => ({ e, r: rankScore(e.score, e.publishedAt || e.fetchedAt, now) }))
-    .filter(x => x.r > 0).sort((a, b) => b.r - a.r).slice(0, n).map(x => x.e);
-  const have = new Set(ranked.map(e => e.id));
-  const fallback = ranked.length < n ? cand.filter(e => !have.has(e.id))
-    .sort((a, b) => Date.parse(b.publishedAt || b.fetchedAt || 0) - Date.parse(a.publishedAt || a.fetchedAt || 0))
-    .slice(0, n - ranked.length) : [];
-  return [...ranked, ...fallback];
+  const byRecency = (a, b) => Date.parse(b.publishedAt || b.fetchedAt || 0) - Date.parse(a.publishedAt || a.fetchedAt || 0);
+  const scored = cand.filter(e => Number(e.score) > 0)
+    .sort((a, b) => (Number(b.score) - Number(a.score)) || byRecency(a, b)).slice(0, n);
+  const have = new Set(scored.map(e => e.id));
+  const rest = scored.length < n ? cand.filter(e => !have.has(e.id)).sort(byRecency).slice(0, n - scored.length) : [];
+  return [...scored, ...rest];
 }
 
 export function buildMarkdown(s, lang = 'zh', boards) {

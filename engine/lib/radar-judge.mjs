@@ -11,7 +11,7 @@
 //
 // Dropping is never silent: every dropped id and reason is returned and logged.
 
-import {LANGS,multilingual} from './radar-contract.mjs';
+import {LANGS,multilingual,FIELD_MAX,FORECAST_MAX} from './radar-contract.mjs';
 import {validateEditorial} from './radar-editorial.mjs';
 
 const CONTAM=/[\uac00-\ud7af]|本周|事业|半导体|主办/;
@@ -35,7 +35,7 @@ export function judgeEdition(editionData,events,markets){
     let bad=false;
     const evText=`${original.title} ${original.evidence}`;
     for(const k of FIELDS){
-      try{multilingual(row[k]);validateEditorial(row[k],{title:k==='title',evidence:k==='action'?'':evText,optional:OPTIONAL.has(k)});if(CONTAM.test(row[k].ja))throw new Error('ja contamination');}
+      try{multilingual(row[k],FIELD_MAX[k]);validateEditorial(row[k],{title:k==='title',evidence:k==='action'?'':evText,optional:OPTIONAL.has(k)});if(CONTAM.test(row[k].ja))throw new Error('ja contamination');}
       catch(e){errors.push(`${k}[${row.id}]: ${e.message}`);bad=true;}
     }
     if(!bad)selected.push({...original,title:row.title,summary:row.summary,audience:row.audience,action:row.action,unknowns:row.unknowns});
@@ -50,7 +50,7 @@ export function judgeEdition(editionData,events,markets){
     const q=markets.find(q=>(q.symbol===targetSymbol||q.symbol===`${targetSymbol}-USD`||q.symbol===`${targetSymbol}=F`||`${q.symbol}-USD`===targetSymbol)&&Number.isFinite(q.price)&&q.price>0&&Date.now()-Date.parse(q.at)<5*86400000);
     if(!q||!['above','below'].includes(f.direction)||!(f.probability>0&&f.probability<1))continue;
     if(forecasts.some(x=>x.symbol===q.symbol))continue;
-    try{multilingual(f.rationale);validateEditorial(f.rationale);if(CONTAM.test(f.rationale.ja))throw new Error('contamination');}catch{continue;}
+    try{multilingual(f.rationale,FORECAST_MAX.rationale);validateEditorial(f.rationale);if(CONTAM.test(f.rationale.ja))throw new Error('contamination');}catch{continue;}
     const horizon=Math.min(30,Math.max(1,Math.round(Number(f.horizonDays)||1)));
     const createdAt=new Date().toISOString();const dueAt=new Date(Date.now()+horizon*86400000).toISOString();const above=f.direction==='above';
     const d=dueAt.slice(0,10);

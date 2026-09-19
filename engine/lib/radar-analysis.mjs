@@ -157,7 +157,7 @@ async function runItems(provider,candidates){
       let ok=false;
       for(let t=1;t<=3&&!ok;t++){
         try{
-          const r=await provider.complete(ITEM_SYS,JSON.stringify({candidates:b.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,800),stage:e.stage,unknowns:e.unknowns}))}),{maxTokens:20000,timeout:240000});
+          const r=await provider.complete(ITEM_SYS,JSON.stringify({candidates:b.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,800),stage:e.stage,unknowns:e.unknowns}))}),{maxTokens:20000,timeout:300000});
           const j=parseJson(r.text);
           if(j&&j.en&&Array.isArray(j.en.items)&&j.ja&&j.zh){const ids=new Set(j.en.items.map(i=>i&&i.id));if(b.every(e=>ids.has(e.id))){merge(j);ok=true;break;}}
           throw new Error('bad shape or incomplete');

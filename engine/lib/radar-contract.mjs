@@ -1,8 +1,15 @@
 // Shared publication boundary. Pure functions: safe to import in the Worker.
 export const LANGS = ['ja', 'en', 'zh'];
 export const CATEGORIES = ['ai', 'tech', 'japan-residence', 'japan-life', 'geopolitics', 'crypto', 'stocks'];
+// Per-field length ceilings. The judge enforces these too, so an over-long
+// card is dropped like any other bad card instead of reaching publicSnapshot
+// and taking the whole edition down with it.
+export const FIELD_MAX = { title: 300, summary: 1500, audience: 400, action: 600, unknowns: 600 };
+export const FORECAST_MAX = { claim: 500, rationale: 1000 };
 export function text(value, max = 1500) {
-  if (typeof value !== 'string' || value.length > max) throw new Error('Invalid text');
+  if (typeof value !== 'string') throw new Error('Invalid text: not a string');
+  // Name the overrun: "Invalid text" alone cost an hour of log reading.
+  if (value.length > max) throw new Error(`Invalid text: ${value.length} chars exceeds ${max}`);
   if (/[\u0000-\u0008\u000b\u000c\u000e-\u001f]/.test(value)) throw new Error('Control character');
   return value;
 }
@@ -39,8 +46,8 @@ export function publicSnapshot(input, privateValues = []) {
     publishedAt:e.publishedAt ? timestamp(e.publishedAt) : null, fetchedAt:timestamp(e.fetchedAt),
     stage:choice(e.stage,['announcement','draft','open','closed','withdrawn','unknown']),
     deadlineAt:e.deadlineAt ? timestamp(e.deadlineAt) : null,
-    title:multilingual(e.title,300), summary:multilingual(e.summary,1500),
-    audience:multilingual(e.audience,400), action:multilingual(e.action,600), unknowns:multilingual(e.unknowns,600),
+    title:multilingual(e.title,FIELD_MAX.title), summary:multilingual(e.summary,FIELD_MAX.summary),
+    audience:multilingual(e.audience,FIELD_MAX.audience), action:multilingual(e.action,FIELD_MAX.action), unknowns:multilingual(e.unknowns,FIELD_MAX.unknowns),
     evidence:text(e.evidence,2000), change:choice(e.change,['new','updated','unchanged']),
     score:Math.max(0,Math.min(100,Math.round(Number(e.score)||0))),
     tier:choice(e.tier||'data',['x','primary','media','data']),
@@ -51,7 +58,7 @@ export function publicSnapshot(input, privateValues = []) {
   const forecasts=list(input.forecasts,6).map(f=>({
     id:text(f.id,80),createdAt:timestamp(f.createdAt),dueAt:timestamp(f.dueAt),
     symbol:text(f.symbol,24),baseline:number(f.baseline),direction:choice(f.direction,['above','below']),
-    probability:number(f.probability),claim:multilingual(f.claim,500),rationale:multilingual(f.rationale,1000),
+    probability:number(f.probability),claim:multilingual(f.claim,FORECAST_MAX.claim),rationale:multilingual(f.rationale,FORECAST_MAX.rationale),
     evidence:list(f.evidence,10).map(url),
   }));
   for (const f of forecasts) if (f.probability<=0 || f.probability>=1 || Date.parse(f.dueAt)<=Date.parse(f.createdAt)) throw new Error('Invalid forecast');

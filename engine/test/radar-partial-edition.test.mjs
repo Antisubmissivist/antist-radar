@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { judgeEdition } from '../lib/radar-judge.mjs';
+import { publicSnapshot, text, FIELD_MAX } from '../lib/radar-contract.mjs';
 
 // One card with an ungrounded number used to make the whole edition
 // unpublishable: the sweep burned six minutes of analysis, threw twenty good
@@ -90,4 +91,34 @@ test('the keep threshold retries a thin edition but accepts a normal loss', () =
   assert.ok(20 >= need(21), 'losing 1 of 21 publishes immediately');
   assert.ok(!(12 >= need(21)), 'losing 9 of 21 is retried, not published as-is');
   assert.ok(!(2 >= need(3)), 'a tiny edition must clear MIN_KEPT, not just the ratio');
+});
+
+// A verbose model wrote a title past the contract's 300-character ceiling.
+// The judge measured every field against a flat 1500, waved it through, and
+// publicSnapshot threw "Invalid text" — killing an edition that had already
+// cost six minutes of analysis. The judge now measures each field against the
+// same ceiling the contract enforces, so the card is dropped like any other.
+test('an over-long field is dropped by the judge, not left to crash the publish', () => {
+  const long = goodItem('b', 1);
+  const filler = 'お'.repeat(FIELD_MAX.title + 20);
+  long.title = L({ ja: filler, en: 'A'.repeat(FIELD_MAX.title + 20), zh: '甲'.repeat(FIELD_MAX.title + 20) });
+
+  const j = judgeEdition(edition([goodItem('a', 1), long, goodItem('c', 2)]), sourceEvents(['a', 'b', 'c']), []);
+
+  assert.equal(j.ok, true, 'one long card must not sink the edition');
+  assert.deepEqual(j.result.events.map((e) => e.id), ['a', 'c']);
+  assert.ok(j.errors.some((e) => e.includes('title[b]')), 'the dropped field and id must be named');
+
+  // The surviving edition must actually clear the publication boundary.
+  const now = new Date().toISOString();
+  assert.doesNotThrow(() => publicSnapshot({
+    schema: 2, id: 'test', generatedAt: now, sweepMs: 1, analysisStatus: 'complete',
+    digest: j.result.digest, events: j.result.events.map((e) => ({ ...e, tier: 'media' })),
+    markets: [], sources: [], forecasts: [],
+  }));
+});
+
+// And the contract's own complaint has to say what overran, by how much.
+test('a length rejection names the overrun instead of just "Invalid text"', () => {
+  assert.throws(() => text('x'.repeat(50), 10), (e) => /50 chars exceeds 10/.test(e.message));
 });

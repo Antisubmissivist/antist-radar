@@ -3,12 +3,15 @@
 
 import { LLMProvider } from './provider.mjs';
 
+// Extra output budget reserved for the model's chain of thought.
+const REASONING_HEADROOM = parseInt(process.env.MINIMAX_REASONING_HEADROOM) || 12000;
+
 export class MiniMaxProvider extends LLMProvider {
   constructor(config) {
     super(config);
     this.name = 'minimax';
     this.apiKey = config.apiKey;
-    this.model = config.model || 'MiniMax-M2.5';
+    this.model = config.model || 'MiniMax-M3';
   }
 
   get isConfigured() { return !!this.apiKey; }
@@ -22,7 +25,11 @@ export class MiniMaxProvider extends LLMProvider {
       },
       body: JSON.stringify({
         model: this.model,
-        max_tokens: opts.maxTokens || 4096,
+        // M3 is a reasoning model: its chain of thought is billed against
+        // max_tokens too. Without headroom it spends the whole budget thinking
+        // and returns an empty content, which used to surface as a bare
+        // "Unexpected end of JSON input" three retries later.
+        max_tokens: (opts.maxTokens || 4096) + REASONING_HEADROOM,
         reasoning_split: true,
         messages: [
           { role: 'system', content: systemPrompt },
@@ -38,13 +45,27 @@ export class MiniMaxProvider extends LLMProvider {
     }
 
     const data = await res.json();
-    // M2.5+ emits its chain of thought inline as <think>...</think> in the
-    // OpenAI-compatible response. Left in, it corrupts every downstream
-    // JSON.parse of trade ideas and alert verdicts.
-    const raw = data.choices?.[0]?.message?.content || '';
+    const choice = data.choices?.[0] || {};
+    const msg = choice.message || {};
+    // With reasoning_split the thinking arrives in reasoning_content and
+    // content is clean. Older models (M2.5) inline it as <think>...</think>,
+    // which corrupts every downstream JSON.parse — strip it either way.
+    const raw = msg.content || '';
     const text = raw.replace(/<think>[\s\S]*?<\/think>/gi, '')
                     .replace(/^[\s\S]*?<\/think>/i, '') // unterminated block (hit max_tokens)
                     .trim();
+
+    // An empty answer is a failure, not an empty result. Say why, so the
+    // caller's retry logs name the real cause instead of a JSON parse error.
+    if (!text) {
+      const u = data.usage || {};
+      throw new Error(
+        `MiniMax returned no content (finish_reason=${choice.finish_reason || 'none'}, ` +
+        `reasoning_tokens=${u.completion_tokens_details?.reasoning_tokens ?? '?'}, ` +
+        `completion_tokens=${u.completion_tokens ?? '?'}, ` +
+        `reasoning_chars=${(msg.reasoning_content || '').length})`
+      );
+    }
 
     return {
       text,
@@ -53,7 +74,7 @@ export class MiniMaxProvider extends LLMProvider {
         outputTokens: data.usage?.completion_tokens || 0,
       },
       model: data.model || this.model,
-      finishReason: data.choices?.[0]?.finish_reason || null,
+      finishReason: choice.finish_reason || null,
     };
   }
 }

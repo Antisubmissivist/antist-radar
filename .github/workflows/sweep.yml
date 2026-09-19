@@ -13,7 +13,7 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      LLM_PROVIDER: opencode
+      LLM_PROVIDER: minimax
       LLM_MODEL: ${{ secrets.LLM_MODEL }}
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}

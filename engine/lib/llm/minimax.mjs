@@ -3,8 +3,10 @@
 
 import { LLMProvider } from './provider.mjs';
 
-// Extra output budget reserved for the model's chain of thought.
-const REASONING_HEADROOM = parseInt(process.env.MINIMAX_REASONING_HEADROOM) || 12000;
+// Extra output budget reserved for the model's chain of thought. A live sweep
+// caught M3 spending 22,276 tokens thinking before its first content token, so
+// the headroom has to clear that spike on its own.
+const REASONING_HEADROOM = parseInt(process.env.MINIMAX_REASONING_HEADROOM) || 24000;
 
 export class MiniMaxProvider extends LLMProvider {
   constructor(config) {

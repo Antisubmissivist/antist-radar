@@ -56,7 +56,7 @@ export const MARKET_NAMES: Record<string, LocalizedName> = {
 // Yahoo labels a futures symbol with its front-month contract, so GC=F came
 // back as "Gold Dec 26". Written as a literal: building this with RegExp and a
 // template string silently ate the backslashes and matched nothing.
-const CONTRACT_MONTH = /\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{2}$/;
+const CONTRACT_MONTH = /[\s,]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[\s-]*\d{2,4}$/;
 
 // For a symbol nobody curated, Yahoo's own label is the best available answer —
 // minus the contract month, or a reader watching gold sees whichever contract

@@ -37,7 +37,7 @@ test('the symbols the strip ships with are all curated', () => {
 // The bug the user reported: the gold tile read "Gold Dec 26". The stripper is
 // asserted directly because the first version of it was built with RegExp and
 // a template string, which ate the backslashes and matched nothing.
-const CONTRACT_MONTH = /\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{2}$/;
+const CONTRACT_MONTH = /[\s,]+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[\s-]*\d{2,4}$/;
 const cleanVendorName = (raw, symbol) => {
   let t = String(raw || '').trim().replace(CONTRACT_MONTH, '');
   if (/-USD$/i.test(symbol)) t = t.replace(/\s+USD$/i, '');
@@ -48,6 +48,9 @@ test('POISON: a futures contract month is stripped, not shipped to the tile', ()
   assert.equal(cleanVendorName('Gold Dec 26', 'GC=F'), 'Gold');
   assert.equal(cleanVendorName('Crude Oil Nov 26', 'CL=F'), 'Crude Oil');
   assert.equal(cleanVendorName('Silver Dec 26', 'SI=F'), 'Silver');
+  // Yahoo does not use one format: this one came back live from ZC=F.
+  assert.equal(cleanVendorName('Corn Futures,Dec-2026', 'ZC=F'), 'Corn Futures');
+  assert.equal(cleanVendorName('Copper', 'HG=F'), 'Copper', 'a name with no month must survive');
 });
 
 test('the pattern as actually written in markets.ts strips the month', () => {
@@ -61,6 +64,7 @@ test('the pattern as actually written in markets.ts strips the month', () => {
   const live = new Function('return ' + m[1])();
   assert.equal('Gold Dec 26'.replace(live, ''), 'Gold');
   assert.equal('Crude Oil Nov 26'.replace(live, ''), 'Crude Oil');
+  assert.equal('Corn Futures,Dec-2026'.replace(live, ''), 'Corn Futures');
   assert.equal('Gold'.replace(live, ''), 'Gold', 'a name with no contract month must survive untouched');
 });
 

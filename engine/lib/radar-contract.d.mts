@@ -4,6 +4,10 @@ export interface Quote {symbol:string;name:string;price:number;changePct:number;
 export interface Source {name:string;status:'ok'|'quiet'|'degraded'|'unavailable'|'stale';count:number;url:string;fetchedAt:string}
 export interface Forecast {id:string;createdAt:string;dueAt:string;symbol:string;baseline:number;direction:'above'|'below';probability:number;claim:Localized;rationale:Localized;evidence:string[]}
 export interface Snapshot {schema:2;id:string;generatedAt:string;sweepMs:number;analysisStatus:'complete'|'degraded';digest:Localized;events:RadarEvent[];markets:Quote[];sources:Source[];forecasts:Forecast[]}
+export const CATEGORIES:readonly ['ai','tech','japan-residence','japan-life','geopolitics','crypto','stocks'];
+export const FIELD_MAX:{title:number;summary:number;audience:number;action:number;unknowns:number};
+export const FORECAST_MAX:{claim:number;rationale:number};
+export function text(value:unknown,max?:number):string;
 export function publicSnapshot(input:unknown,privateValues?:string[]):Snapshot;
 export function resolveForecast(forecast:{symbol:unknown;baseline:unknown;direction:unknown;dueAt:unknown},quotes:Quote[],now?:number):{status:'hit'|'miss';observed:number;observationAt:string;resolvedAt:string}|null;
 export function assertPrivateFree(value:unknown,privateValues?:string[]):unknown;

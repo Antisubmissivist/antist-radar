@@ -5,7 +5,74 @@
 type MarketsEnv = { DB: D1Database };
 
 export type WatchItem = { symbol: string; name: string };
-export type MarketQuote = { symbol: string; name: string; price: number; changePct: number; at: string; source: string };
+export type LocalizedName = { ja: string; en: string; zh: string };
+export type MarketQuote = { symbol: string; name: string; names: LocalizedName; price: number; changePct: number; at: string; source: string };
+
+// Yahoo only ever answers in English — passing lang=ja-JP/zh-Hans-CN returns
+// the same string — and for futures it answers with the individual contract,
+// so the gold tile read "Gold Dec 26". Proper nouns with settled translations
+// are deterministic data, so they live here rather than being guessed per
+// request. Keys are normalised symbols.
+export const MARKET_NAMES: Record<string, LocalizedName> = {
+  '^GSPC': { ja: 'S&P500種指数', en: 'S&P 500', zh: '标普500指数' },
+  '^IXIC': { ja: 'ナスダック総合指数', en: 'Nasdaq Composite', zh: '纳斯达克综合指数' },
+  '^DJI': { ja: 'ダウ工業株30種平均', en: 'Dow Jones Industrial Average', zh: '道琼斯工业平均指数' },
+  '^RUT': { ja: 'ラッセル2000指数', en: 'Russell 2000', zh: '罗素2000指数' },
+  '^N225': { ja: '日経平均株価', en: 'Nikkei 225', zh: '日经225指数' },
+  '^VIX': { ja: 'VIX指数（恐怖指数）', en: 'CBOE Volatility Index', zh: 'VIX恐慌指数' },
+  'TLT': { ja: '米国20年超国債ETF', en: 'iShares 20+ Year Treasury Bond ETF', zh: '20年期以上美国国债ETF' },
+  'HYG': { ja: '米ハイイールド社債ETF', en: 'iShares High Yield Corporate Bond ETF', zh: '高收益公司债ETF' },
+  'LQD': { ja: '米投資適格社債ETF', en: 'iShares Investment Grade Corporate Bond ETF', zh: '投资级公司债ETF' },
+  'GC=F': { ja: '金先物', en: 'Gold Futures', zh: '黄金期货' },
+  'SI=F': { ja: '銀先物', en: 'Silver Futures', zh: '白银期货' },
+  'CL=F': { ja: 'WTI原油先物', en: 'WTI Crude Oil Futures', zh: 'WTI原油期货' },
+  'BZ=F': { ja: 'ブレント原油先物', en: 'Brent Crude Oil Futures', zh: '布伦特原油期货' },
+  'NG=F': { ja: '天然ガス先物', en: 'Natural Gas Futures', zh: '天然气期货' },
+  'BTC-USD': { ja: 'ビットコイン', en: 'Bitcoin', zh: '比特币' },
+  'ETH-USD': { ja: 'イーサリアム', en: 'Ethereum', zh: '以太坊' },
+  'SOL-USD': { ja: 'ソラナ', en: 'Solana', zh: 'Solana' },
+  'NVDA': { ja: 'エヌビディア', en: 'NVIDIA', zh: '英伟达' },
+  'MSFT': { ja: 'マイクロソフト', en: 'Microsoft', zh: '微软' },
+  'GOOGL': { ja: 'アルファベット', en: 'Alphabet', zh: 'Alphabet（谷歌母公司）' },
+  'META': { ja: 'メタ', en: 'Meta', zh: 'Meta' },
+  'AAPL': { ja: 'アップル', en: 'Apple', zh: '苹果' },
+  'AMZN': { ja: 'アマゾン', en: 'Amazon', zh: '亚马逊' },
+  'AVGO': { ja: 'ブロードコム', en: 'Broadcom', zh: '博通' },
+  'TSM': { ja: 'TSMC（台湾積体電路）', en: 'TSMC', zh: '台积电' },
+  'AMD': { ja: 'AMD', en: 'AMD', zh: 'AMD' },
+  'INTC': { ja: 'インテル', en: 'Intel', zh: '英特尔' },
+  'TSLA': { ja: 'テスラ', en: 'Tesla', zh: '特斯拉' },
+  'PLTR': { ja: 'パランティア', en: 'Palantir', zh: 'Palantir' },
+  'SMH': { ja: '半導体ETF（SMH）', en: 'VanEck Semiconductor ETF', zh: '半导体ETF' },
+  '7203.T': { ja: 'トヨタ自動車', en: 'Toyota Motor', zh: '丰田汽车' },
+  '6758.T': { ja: 'ソニーグループ', en: 'Sony Group', zh: '索尼集团' },
+  '9984.T': { ja: 'ソフトバンクグループ', en: 'SoftBank Group', zh: '软银集团' },
+  '8306.T': { ja: '三菱UFJフィナンシャル・グループ', en: 'Mitsubishi UFJ Financial Group', zh: '三菱日联金融集团' },
+  'USDJPY=X': { ja: '米ドル/円', en: 'USD/JPY', zh: '美元/日元' },
+  'EURUSD=X': { ja: 'ユーロ/米ドル', en: 'EUR/USD', zh: '欧元/美元' },
+  'CNY=X': { ja: '米ドル/人民元', en: 'USD/CNY', zh: '美元/人民币' },
+};
+
+// Yahoo labels a futures symbol with its front-month contract, so GC=F came
+// back as "Gold Dec 26". Written as a literal: building this with RegExp and a
+// template string silently ate the backslashes and matched nothing.
+const CONTRACT_MONTH = /\s+(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)\s+\d{2}$/;
+
+// For a symbol nobody curated, Yahoo's own label is the best available answer —
+// minus the contract month, or a reader watching gold sees whichever contract
+// happens to be front-month today.
+export function cleanVendorName(raw: string, symbol: string): string {
+  let t = String(raw || '').trim().replace(CONTRACT_MONTH, '');
+  if (/-USD$/i.test(symbol)) t = t.replace(/\s+USD$/i, '');
+  return t.trim() || symbol;
+}
+
+export function resolveNames(symbol: string, vendorName?: string): LocalizedName {
+  const curated = MARKET_NAMES[normalizeSymbol(symbol)];
+  if (curated) return curated;
+  const t = cleanVendorName(vendorName || symbol, symbol);
+  return { ja: t, en: t, zh: t };
+}
 
 export const DEFAULT_WATCHLIST: WatchItem[] = [
   { symbol: 'BTC-USD', name: 'Bitcoin' },
@@ -50,9 +117,13 @@ async function quote(item: WatchItem): Promise<MarketQuote | null> {
     const prev = Number(m.chartPreviousClose ?? m.previousClose);
     if (!Number.isFinite(price)) return null;
     const changePct = prev ? ((price - prev) / prev) * 100 : 0;
+    const names = resolveNames(item.symbol, String(m.shortName || m.longName || ''));
     return {
       symbol: item.symbol,
-      name: item.name || String(m.shortName || item.symbol),
+      // `name` stays English for the published snapshot contract; `names`
+      // carries all three for the strip, which renders per locale.
+      name: names.en || item.name || item.symbol,
+      names,
       price,
       changePct: Math.round(changePct * 100) / 100,
       at: new Date((Number(m.regularMarketTime) || Math.floor(Date.now() / 1000)) * 1000).toISOString(),

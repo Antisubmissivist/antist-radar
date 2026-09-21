@@ -4,6 +4,7 @@ import {writeFile} from 'node:fs/promises';
 import {selectionSystemPrompt,PERSONA_EN} from './persona.mjs';
 import {sourceTier,TIER_RANK} from './source-tier.mjs';
 import {judgeEdition} from './radar-judge.mjs';
+import {CATEGORIES} from './radar-contract.mjs';
 
 const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
 const parseJson=t=>{const f=String(t||'').replace(/^```(?:json)?\s*|\s*```$/g,'').trim();const a=f.indexOf('{'),b=f.lastIndexOf('}');return JSON.parse(a>=0&&b>a?f.slice(a,b+1):f);};
@@ -16,7 +17,8 @@ function extractScoredItems(text){
   while((block=objRegex.exec(text))!==null){
     const idM=block[0].match(/"id"\s*:\s*"([^"]+)"/);
     const scoreM=block[0].match(/"score"\s*:\s*(\d+)/);
-    if(idM&&scoreM)items.push({id:idM[1],score:Number(scoreM[1])});
+    const catM=block[0].match(/"category"\s*:\s*"([^"]+)"/);
+    if(idM&&scoreM)items.push({id:idM[1],score:Number(scoreM[1]),category:catM?catM[1]:undefined});
   }
   return items;
 }
@@ -39,8 +41,25 @@ async function selectByPersona(provider,pool){
       }catch(e){lastErr=e;console.error(`[radar] persona attempt ${attempt} failed:`,e.message);}
     }
     if(!items.length)throw new Error('persona scoring produced no scores'+(lastErr?' — last error: '+lastErr.message:''));
-    const byId=new Map(pool.map(e=>[e.id,e]));const scored=[];
-    for(const row of items){const id=String((row&&row.id)||'');const e=byId.get(id);if(e&&!scored.includes(e)){e.score=Math.max(0,Math.min(100,Math.round(Number(row&&row.score)||0)));scored.push(e);}}
+    const byId=new Map(pool.map(e=>[e.id,e]));const scored=[];const moved=[];
+    for(const row of items){
+      const id=String((row&&row.id)||'');const e=byId.get(id);
+      if(!e||scored.includes(e))continue;
+      e.score=Math.max(0,Math.min(100,Math.round(Number(row&&row.score)||0)));
+      // The board comes from the model reading the item; the source-level
+      // category is only a prefill and is routinely wrong (a global job ad
+      // filed as life-in-Japan, a version bump filed as AI). The model is
+      // allowed to overrule it, but only with one of the seven published
+      // values — anything else keeps the prefill. Judgement to the model,
+      // the whitelist to the code.
+      const proposed=String((row&&row.category)||'').trim();
+      if(proposed&&proposed!==e.category&&CATEGORIES.includes(proposed)){
+        moved.push(`${e.source}: ${e.category}→${proposed}`);
+        e.category=proposed;
+      }
+      scored.push(e);
+    }
+    if(moved.length)console.error(JSON.stringify({event:'reclassified',count:moved.length,moves:moved.slice(0,12)}));
     // Proximity to where the news broke is part of relevance, so it is scored,
     // not bolted on after. For AI, X is the primary source — the labs and
     // builders post there first and outlets rewrite it hours later — so an

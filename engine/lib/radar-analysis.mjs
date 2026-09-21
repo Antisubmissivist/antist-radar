@@ -26,8 +26,19 @@ function extractScoredItems(text){
 async function selectByPersona(provider,pool){
   if(!pool.length)return [];
   try{
-    const r=await provider.complete(selectionSystemPrompt(),JSON.stringify(pool.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,180)}))),{maxTokens:12000,timeout:180000});
-    const items=extractScoredItems(r.text);
+    // Scoring is the one step whose failure used to be invisible: it returned
+    // an empty list, every card kept score 0, and the edition published looking
+    // normal while the homepage silently fell back to ordering by freshness.
+    // Retry it, and never let a scoreless result pass for a scored one.
+    let items=[];let lastErr=null;
+    for(let attempt=1;attempt<=3&&!items.length;attempt++){
+      try{
+        const r=await provider.complete(selectionSystemPrompt(),JSON.stringify(pool.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,180)}))),{maxTokens:12000,timeout:180000});
+        items=extractScoredItems(r.text);
+        if(!items.length)console.error(`[radar] persona attempt ${attempt}: model answered ${r.text.length} chars but no {id,score} pair survived parsing (finish_reason=${r.finishReason})`);
+      }catch(e){lastErr=e;console.error(`[radar] persona attempt ${attempt} failed:`,e.message);}
+    }
+    if(!items.length)throw new Error('persona scoring produced no scores'+(lastErr?' — last error: '+lastErr.message:''));
     const byId=new Map(pool.map(e=>[e.id,e]));const scored=[];
     for(const row of items){const id=String((row&&row.id)||'');const e=byId.get(id);if(e&&!scored.includes(e)){e.score=Math.max(0,Math.min(100,Math.round(Number(row&&row.score)||0)));scored.push(e);}}
     // Proximity to where the news broke is part of relevance, so it is scored,
@@ -50,7 +61,13 @@ async function selectByPersona(provider,pool){
     console.error('[radar] tiers picked: '+JSON.stringify(capped.reduce((m,e)=>((m[e.tier]=(m[e.tier]||0)+1),m),{})));
     console.error(`[radar] persona scored ${scored.length}, capped ${capped.length}/${pool.length}`);
     return capped;
-  }catch(e){console.error('[radar] persona selection failed:',e.message);return [];}
+  }catch(e){
+    // Degrading to freshness order is survivable; pretending it did not happen
+    // is not. This line is what tells a reader of the log that the edition on
+    // the site was never ranked by relevance at all.
+    console.error(JSON.stringify({event:'persona-selection-degraded',reason:e.message,pool:pool.length}));
+    return [];
+  }
 }
 function roundRobin(sorted,limit){const byCat=new Map();for(const e of sorted){const a=byCat.get(e.category)||[];if(a.length<5)a.push(e);byCat.set(e.category,a);}const lists=[...byCat.values()].filter(l=>l.length);const out=[];while(out.length<limit&&lists.some(l=>l.length)){for(const l of lists){if(out.length>=limit)break;if(l.length)out.push(l.shift());}}return out;}
 
@@ -157,7 +174,7 @@ async function runItems(provider,candidates){
       let ok=false;
       for(let t=1;t<=3&&!ok;t++){
         try{
-          const r=await provider.complete(ITEM_SYS,JSON.stringify({candidates:b.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,800),stage:e.stage,unknowns:e.unknowns}))}),{maxTokens:20000,timeout:300000});
+          const r=await provider.complete(ITEM_SYS,JSON.stringify({candidates:b.map(e=>({id:e.id,category:e.category,source:e.source,title:e.title,evidence:(e.evidence||'').slice(0,800),stage:e.stage,unknowns:e.unknowns}))}),{maxTokens:20000,timeout:240000});
           const j=parseJson(r.text);
           if(j&&j.en&&Array.isArray(j.en.items)&&j.ja&&j.zh){const ids=new Set(j.en.items.map(i=>i&&i.id));if(b.every(e=>ids.has(e.id))){merge(j);ok=true;break;}}
           throw new Error('bad shape or incomplete');

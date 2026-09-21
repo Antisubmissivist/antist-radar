@@ -5,6 +5,12 @@
 import { LLMProvider } from './provider.mjs';
 import { randomUUID } from 'node:crypto';
 
+// deepseek-v4.1-flash reasons before it answers and bills that thinking against
+// max_tokens. Scoring a 70-item pool measured 13,279 reasoning tokens, so the
+// old flat 12,000 budget was spent before the first score was written and the
+// call came back empty. Reserve the thinking budget separately.
+const REASONING_HEADROOM = parseInt(process.env.OPENCODE_REASONING_HEADROOM) || 24000;
+
 export class OpenCodeProvider extends LLMProvider {
   constructor(config) {
     super(config);
@@ -28,7 +34,7 @@ export class OpenCodeProvider extends LLMProvider {
       },
       body: JSON.stringify({
         model: this.model,
-        max_tokens: opts.maxTokens || 4096,
+        max_tokens: (opts.maxTokens || 4096) + REASONING_HEADROOM,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userMessage },
@@ -43,12 +49,25 @@ export class OpenCodeProvider extends LLMProvider {
     }
 
     const data = await res.json();
-    const msg = data.choices?.[0]?.message || {};
+    const choice = data.choices?.[0] || {};
+    const msg = choice.message || {};
     // The provider returns reasoning separately; never let it reach the JSON parser.
     const raw = msg.content || '';
     const text = raw.replace(/<think>[\s\S]*?<\/think>/gi, '')
                     .replace(/^[\s\S]*?<\/think>/i, '')
                     .trim();
+
+    // An empty answer is a failure, not an empty result. Said plainly here, it
+    // stops surfacing downstream as "0 items scored" or a JSON parse error.
+    if (!text) {
+      const u = data.usage || {};
+      throw new Error(
+        `OpenCode returned no content (finish_reason=${choice.finish_reason || 'none'}, ` +
+        `reasoning_tokens=${u.completion_tokens_details?.reasoning_tokens ?? '?'}, ` +
+        `completion_tokens=${u.completion_tokens ?? '?'}, ` +
+        `reasoning_chars=${(msg.reasoning_content || '').length})`
+      );
+    }
 
     return {
       text,
@@ -57,7 +76,7 @@ export class OpenCodeProvider extends LLMProvider {
         outputTokens: data.usage?.completion_tokens || 0,
       },
       model: data.model || this.model,
-      finishReason: data.choices?.[0]?.finish_reason || null,
+      finishReason: choice.finish_reason || null,
     };
   }
 }

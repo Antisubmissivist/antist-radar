@@ -38,7 +38,6 @@ const BY_NAME = new Map(Object.entries({
   WHO: 'primary',
   ReliefWeb: 'primary',
   'GitHub Releases': 'primary',
-  'Greenhouse · Cloudflare': 'primary',
 
   // --- media: reporting about something that happened elsewhere --------------
   Techmeme: 'media',

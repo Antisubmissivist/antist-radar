@@ -48,7 +48,7 @@ async function releases() {
   for(const repo of repos) {
     const rows=await request(`https://api.github.com/repos/${repo}/releases?per_page=4`,'json',process.env.GH_READ_TOKEN?{Authorization:`Bearer ${process.env.GH_READ_TOKEN}`} : {});
     if(!Array.isArray(rows)) throw new Error('Releases schema changed');scanned+=rows.length;
-    items.push(...rows.filter(r=>!r.draft&&!r.prerelease).slice(0,2).map(r=>event('GitHub Releases','ai',{sourceId:`${repo}:${r.id}`,title:`${repo} ${r.tag_name}`,url:r.html_url,publishedAt:iso(r.published_at),evidence:plain(r.body).slice(0,1800)})));
+    items.push(...rows.filter(r=>!r.draft&&!r.prerelease).slice(0,2).map(r=>event('GitHub Releases','tech',{sourceId:`${repo}:${r.id}`,title:`${repo} ${r.tag_name}`,url:r.html_url,publishedAt:iso(r.published_at),evidence:plain(r.body).slice(0,1800)})));
   }return {items,scanned};
 }
 async function grants() {
@@ -99,18 +99,6 @@ async function notices(name,category,base,pattern) {
       // A date anywhere in a document is not necessarily its publication date.
       publishedAt:iso(doc('meta[property="article:published_time"]').attr('content')),unknowns:'Verify the official conditions and deadlines. Publication date is unknown unless supplied by page metadata.'});
   }));return {items,scanned:links.length};
-}
-async function jobs() {
-  const d=await request('https://boards-api.greenhouse.io/v1/boards/cloudflare/jobs?content=true','json');
-  if(!Array.isArray(d.jobs))throw new Error('Jobs schema changed');
-  const matched=d.jobs.filter(j=>/Japan|Tokyo|Remote/i.test(j.location?.name||''));
-  matched.sort((a,b)=>Number(/Japan|Tokyo/i.test(b.location?.name))-Number(/Japan|Tokyo/i.test(a.location?.name))||Date.parse(b.updated_at)-Date.parse(a.updated_at));
-  return {scanned:d.jobs.length,items:matched.slice(0,4).map(j=>{
-    const detail=plain(plain(j.content));const start=detail.search(/About the role|What you|Responsibilities|About the department|Location/i);
-    return event('Greenhouse · Cloudflare','japan-life',{sourceId:j.id,title:j.title,url:j.absolute_url,stage:'open',
-      evidence:`Employer: Cloudflare. Location: ${j.location?.name}. Updated: ${j.updated_at}. ${detail.slice(Math.max(0,start),Math.max(0,start)+1400)}`.replace(/[\w.+-]+@[\w.-]+\.[A-Za-z]{2,}/g,'[official contact omitted]'),
-      unknowns:'Selected employer only, not the whole job market. A remote label does not mean worldwide eligibility. Salary, work authorization and sponsorship require original-source verification.'});
-  })};
 }
 async function clawfeed() {
   const data=await request('https://clawfeed.kevinhe.io/api/digests?type=4h&limit=3','json');
@@ -170,7 +158,6 @@ export const FEEDS=[
   {name:'JVN',url:'https://jvn.jp/rss/',collect:()=>feed('JVN','tech','https://jvn.jp/rss/jvn.rdf')},
   {name:'e-Gov',url:'https://public-comment.e-gov.go.jp/',collect:policies},
   {name:'JGrants',url:'https://developers.digital.go.jp/documents/jgrants/api/',collect:grants},
-  {name:'Greenhouse · Cloudflare',url:'https://www.cloudflare.com/careers/jobs/',collect:jobs},
   {name:'JASSO',url:'https://www.jasso.go.jp/ryugaku/',collect:()=>notices('JASSO','japan-life','https://www.jasso.go.jp/ryugaku/',/\/(news\/|ryugaku\/.+\/event\/|ryugaku\/.+\/admission)/)},
   {name:'Kokusen',url:'https://www.kokusen.go.jp/mimamori/mj_mglist.html',collect:()=>notices('Kokusen','japan-life','https://www.kokusen.go.jp/mimamori/mj_mglist.html',/\/mj_mailmag\/mj-shinsen\d+\.html$/)},
   {name:'Bank of Japan',url:'https://www.boj.or.jp/rss/whatsnew.xml',collect:()=>feed('Bank of Japan','stocks','https://www.boj.or.jp/rss/whatsnew.xml')},

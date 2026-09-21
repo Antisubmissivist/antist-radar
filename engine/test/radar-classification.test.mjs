@@ -40,3 +40,32 @@ test('every board the prompt offers is a board the contract accepts', () => {
 test('the prompt asks for category in the JSON shape it parses', () => {
   assert.match(selectionSystemPrompt(), /"category"\s*:/);
 });
+
+// The boundary cases the prompt is written against. These are the ones the
+// model got wrong before the rules were spelled out: an AI lab's IPO read as
+// AI news, export controls between states read as AI news, a bitcoin treasury
+// company's buyback read as crypto. The prompt must keep naming the rule that
+// settles each of them — this test does not call the model, it checks that the
+// written spec still covers the cases the spec exists for.
+const BOUNDARY_RULES = [
+  ['AI 公司的财务事件', 'stocks'],   // Anthropic IPO, OpenAI not listing this year
+  ['国家之间围绕 AI 的博弈', 'geopolitics'], // Nvidia export controls
+  ['上市公司的股票行为', 'stocks'],   // Metaplanet buyback despite holding bitcoin
+  ['加密监管立法', 'crypto'],
+  ['身份手续', 'japan-residence'],
+];
+
+test('every boundary rule the model kept failing is still spelled out', () => {
+  const prompt = selectionSystemPrompt();
+  for (const [rule, board] of BOUNDARY_RULES) {
+    assert.ok(prompt.includes(rule), `the prompt must still state the "${rule}" rule`);
+    assert.ok(CATEGORIES.includes(board));
+  }
+});
+
+test('the prompt states subject-over-mention, the rule the AI board kept violating', () => {
+  const prompt = selectionSystemPrompt();
+  // Without this, "ai" becomes a magnet: in 2026 every story mentions AI.
+  assert.ok(/提到 AI ≠ AI 新闻/.test(prompt), 'the mention-is-not-subject rule must survive edits');
+  assert.ok(/只能进一个板块/.test(prompt), 'single-board rule must survive edits');
+});

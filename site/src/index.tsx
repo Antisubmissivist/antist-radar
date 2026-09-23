@@ -204,18 +204,23 @@ function rowToEvent(r:Record<string,unknown>):any{const j=(v:unknown)=>{try{retu
 // Candidates per board, fetched board by board.
 //
 // The homepage used to pull one shared "newest 500 rows" window and let each
-// board pick from it. That window is a time cut, not a relevance cut, so a
-// high-volume board (stocks, geopolitics, AI) fills it and a quiet board's
-// candidates fall off the end — "Residency & rules" rendered a single card while
-// its two candidates sat just past the cutoff, and a score-80 AI card lost its
-// slot to fresher, lower-scored ones. Querying each board on its own (there is
-// an index on category+first_seen) makes the pool relevance-ordered per board:
-// scored first, unscored last as the fallback, ties on recency.
+// board pick from it. That window was a time cut, not a relevance cut, so a
+// high-volume board (stocks, geopolitics, AI) filled it and a quiet board's
+// candidates fell off the end.
+//
+// It also had a second, worse cut: a 7-day floor. Every board's highest-scored
+// cards turned out to be 11-14 days old, so the homepage showed the best of
+// last week while the archive (/c/:board, all-time, score-ordered) showed the
+// real leaders — the two pages disagreed about what "top of this board" means.
+// The site keeps every event with a relevance score and the board pages sort by
+// that score; the homepage now does the same, over all retained events, so the
+// three cards leading a board are the three highest-scored for that board.
+// Unscored rows are the fallback only (newest first), never a filter.
 const BOARD_CANDIDATES=12;
 async function boardCandidates(env:Bindings,s:Snapshot|null){
   const lists=new Map<string,any[]>();
   await Promise.all((BOARDS as readonly string[]).map(async b=>{
-    const res=await env.DB.prepare("SELECT * FROM events WHERE category=? AND first_seen >= datetime('now','-7 days') ORDER BY CASE WHEN score IS NULL OR score=0 THEN 1 ELSE 0 END, score DESC, COALESCE(published_at,first_seen) DESC LIMIT ?").bind(b,BOARD_CANDIDATES).all().catch(()=>({results:[] as any[]}));
+    const res=await env.DB.prepare("SELECT * FROM events WHERE category=? ORDER BY CASE WHEN score IS NULL OR score=0 THEN 1 ELSE 0 END, score DESC, COALESCE(published_at,first_seen) DESC LIMIT ?").bind(b,BOARD_CANDIDATES).all().catch(()=>({results:[] as any[]}));
     const m=new Map<string,any>();
     for(const r of ((res as any).results||[]) as Record<string,unknown>[]){const e=rowToEvent(r);if(e&&e.id)m.set(e.id,e);}
     // The snapshot is the newest edition; its cards win over the archived copy.

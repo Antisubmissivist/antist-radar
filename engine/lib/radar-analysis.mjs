@@ -244,7 +244,17 @@ export async function analyseRadar(events,markets){
       ]);
       const have=new Set(lanes.en.map(i=>i&&i.id));
       const missing=candidates.filter(c=>!have.has(c.id));
-      if(missing.length)throw new Error('Incomplete analysis: '+missing.length+' of '+candidates.length+' candidates missing');
+      // A batch that never parses (provider answered with non-JSON, e.g. a
+      // canned refusal) used to fail the whole edition: three analysis attempts,
+      // then nothing published — the site froze for hours on a provider blip.
+      // Retry while candidates are missing, but on the last attempt drop the
+      // missing ones and let the judge weigh what survived, exactly like a bad
+      // card. Total failure (empty lanes or a bad digest) still fails: the
+      // judge returns ok:false and the caller throws.
+      if(missing.length){
+        if(attempt<3)throw new Error('Incomplete analysis: '+missing.length+' of '+candidates.length+' candidates missing');
+        console.error(JSON.stringify({event:'incomplete-edition',missing:missing.length,analysed:candidates.length,ids:missing.map(c=>c.id).slice(0,10)}));
+      }
       // Drop "no content" cards: the model states the material lacks usable detail.
       const NOCONTENT=/没有(提供|可读)|看不见内容|未提供更多|细节(尚|还)未|尚未(确认|明确)|正文不完整|无法(读取|确认|获取|证实)|信息不足|内容不完整|確認できません|確認できない|詳細は未|本文が不完全|insufficient (evidence|information)|no further details|not (yet )?(confirmed|available|known)|incomplete|unreadable|cannot be (confirmed|determined)/i;
       const okInfo=r=>r&&!NOCONTENT.test([r.summary&&r.summary.zh,r.summary&&r.summary.ja,r.summary&&r.summary.en].filter(Boolean).join(' '));

@@ -27,6 +27,7 @@ jobs:
       BRIEF_LANG: ${{ github.event.inputs.lang || 'zh' }}
       BRIEF_DATE: ${{ github.event.inputs.date }}
       BRIEF_MODE: ${{ github.event.inputs.mode || 'daily' }}
+      RADAR_INGEST_TOKEN: ${{ secrets.RADAR_INGEST_TOKEN }}
       TELEGRAM_BOT_TOKEN: ${{ secrets.TELEGRAM_BOT_TOKEN }}
       TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
     steps:

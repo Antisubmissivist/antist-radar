@@ -279,6 +279,9 @@ export async function collectFeeds() {
   return Promise.all(FEEDS.map(async f=>{
     const fetchedAt=new Date().toISOString();
     try {const d=await f.collect();return {name:f.name,url:f.url,fetchedAt,status:d.items.length?'ok':'quiet',...d};}
-    catch(e) {return {name:f.name,url:f.url,fetchedAt,status:'unavailable',items:[],scanned:0,error:e.message};}
+    // A feed that throws used to vanish into a red badge with no reason
+    // anywhere in the log — the exact failure mode the source list exists to
+    // prevent. Log it.
+    catch(e) {console.error(JSON.stringify({event:'feed-unavailable',name:f.name,error:e.message}));return {name:f.name,url:f.url,fetchedAt,status:'unavailable',items:[],scanned:0,error:e.message};}
   }));
 }

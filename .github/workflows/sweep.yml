@@ -20,8 +20,8 @@ jobs:
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
       EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
-      ACLED_EMAIL: ${{ secrets.ACLED_EMAIL }}
-      ACLED_PASSWORD: ${{ secrets.ACLED_PASSWORD }}
+      BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
+      BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
       RADAR_INGEST_TOKEN: ${{ secrets.RADAR_INGEST_TOKEN }}
       GH_READ_TOKEN: ${{ github.token }}
       SOURCE_TIMEOUT_MS: '45000'

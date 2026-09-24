@@ -96,8 +96,8 @@ const sources=Object.keys(sweep.timing||{}).filter(n=>n!=='Positions').map(name=
 sources.push(...feeds.map(f=>({name:f.name,url:f.url,fetchedAt:f.fetchedAt,status:f.status,count:f.items.length})));
 const candidate={schema:2,id:createHash('sha256').update(now).digest('hex').slice(0,24),generatedAt:now,sweepMs,analysisStatus:analysis.status||'complete',digest:analysis.digest,events:analysis.events,markets,sources,forecasts:analysis.forecasts};
 // Diagnose a private-value collision without printing the value itself.
-{const js=JSON.stringify(candidate);const keys=['LLM_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','BYREAL_WALLET','ACLED_EMAIL','ACLED_PASSWORD'];const hit=keys.find(k=>{const v=process.env[k];return v&&v.length>5&&js.includes(v);});if(hit)console.log(JSON.stringify({event:'private-value-in-snapshot',envKey:hit}));}
-const secrets=['LLM_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','BYREAL_WALLET','ACLED_EMAIL','ACLED_PASSWORD'].map(k=>process.env[k]).filter(Boolean);
+{const js=JSON.stringify(candidate);const keys=['LLM_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','BYREAL_WALLET','BLUESKY_APP_PASSWORD'];const hit=keys.find(k=>{const v=process.env[k];return v&&v.length>5&&js.includes(v);});if(hit)console.log(JSON.stringify({event:'private-value-in-snapshot',envKey:hit}));}
+const secrets=['LLM_API_KEY','TELEGRAM_BOT_TOKEN','TELEGRAM_CHAT_ID','BYREAL_WALLET','BLUESKY_APP_PASSWORD'].map(k=>process.env[k]).filter(Boolean);
 const snapshot=publicSnapshot(candidate,secrets);await atomic('runs/public.json',snapshot);
 if(push){
   if(!process.env.RADAR_INGEST_TOKEN)throw new Error('Missing ingestion credential');

@@ -183,32 +183,36 @@ async function ainews() {
 // count is the one line below.
 const X_POLL_HOURS_UTC = [23, 5, 11]; // 08/14/20 JST
 const xDue = () => X_POLL_HOURS_UTC.includes(new Date().getUTCHours());
-const xId = (t) => String(t?.tweet_id || t?.id_str || t?.id || t?.rest_id || '');
-const xHandle = (t) => { const u = t?.user || t?.author || {}; return String(u.screen_name || u.username || u.handle || t?.screen_name || t?.username || ''); };
-const xText = (t) => String(t?.text || t?.full_text || t?.tweet_text || t?.content || '').replace(/\s+/g, ' ').trim();
 async function xsearch() {
   const key = process.env.XTWITTER_API_KEY;
   if (!key) throw new Error('XTWITTER_API_KEY unset');
   if (!xDue()) return { items: [], scanned: 0, status: 'quiet' };
   const q = '(AI OR OpenAI OR Anthropic OR Nvidia OR Taiwan OR Iran OR Ukraine OR Bitcoin OR "Federal Reserve") min_faves:1000 -filter:replies';
   const params = new URLSearchParams({ q, type: 'Top', count: '20' });
-  const j = await request(`https://x-twitter2.p.rapidapi.com/search?${params}`, 'json', {
+  // The path is /Search — capital S. (Lowercase /search answers 404, and without
+  // a key the auth check fires first and answers 401, which reads like it exists.)
+  const j = await request(`https://x-twitter2.p.rapidapi.com/Search?${params}`, 'json', {
     'X-RapidAPI-Key': key, 'X-RapidAPI-Host': 'x-twitter2.p.rapidapi.com',
   });
-  // The wrapper's envelope is not documented; accept the shapes these APIs use.
-  const list = Array.isArray(j?.results) ? j.results : Array.isArray(j?.tweets) ? j.tweets : Array.isArray(j?.data) ? j.data : [];
-  const items = list.map(t => {
-    const id = xId(t), h = xHandle(t), text = xText(t);
-    if (!id || !h || text.length < 20) return null;
+  // x-twitter2 proxies X's GraphQL verbatim: the tweets live in the timeline
+  // instructions, not in a plain array.
+  const entries = ((j?.data?.search_by_raw_query?.search_timeline?.timeline?.instructions) || []).flatMap(i => i?.entries || []);
+  const tweets = entries.map(e => e?.content?.itemContent?.tweet_results?.result).filter(t => t && t.rest_id);
+  const items = tweets.map(t => {
+    const l = t.legacy || {};
+    const u = t.core?.user_results?.result?.legacy || {};
+    const text = String(t.note_tweet?.note_tweet_results?.result?.text || l.full_text || '').replace(/\s+/g, ' ').trim();
+    const handle = String(u.screen_name || '');
+    if (!handle || text.length < 20) return null;
     return event('X', 'ai', {
-      sourceId: `x:${id}`,
+      sourceId: `x:${t.rest_id}`,
       title: text.slice(0, 220),
-      url: `https://x.com/${h}/status/${id}`,
-      publishedAt: iso(t?.created_at || t?.createdAt || t?.date),
-      evidence: `${t?.user?.name || t?.author?.name || h} (@${h})\n${text.slice(0, 900)}`,
+      url: `https://x.com/${handle}/status/${t.rest_id}`,
+      publishedAt: iso(l.created_at),
+      evidence: `${u.name || handle} (@${handle}) · ${l.favorite_count || 0} likes · ${l.retweet_count || 0} retweets\n${text.slice(0, 900)}`,
     });
   }).filter(Boolean).slice(0, 8);
-  return { items, scanned: list.length };
+  return { items, scanned: tweets.length };
 }
 async function stocks() {
   const items=[];let scanned=0;

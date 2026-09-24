@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectBoard, rankScore } from '../lib/radar-digest.mjs';
+import { selectBoard, rankScore, BOARDS } from '../lib/radar-digest.mjs';
+import { CATEGORIES } from '../lib/radar-contract.mjs';
 
 // selectBoard is the single rule the homepage and the Telegram digest share, so
 // these pin down the two things it must do: rank by relevance *decayed by age*,
@@ -52,4 +53,17 @@ test('only the requested board is considered', () => {
   const a = ev('a', { score: 70, thread: 'T1' });
   const b = { ...ev('b', { score: 90, thread: 'T2' }), category: 'tech' };
   assert.deepEqual(selectBoard([a, b], 'ai', 3, now).map(e => e.id), ['a']);
+});
+
+test('a demoted source loses to a comparable one', () => {
+  // ClawFeed rewrites the same tweets without linking to them; AINews links to
+  // the original post. When both carry the day, the clickable one leads.
+  const claw = { id: 'claw', category: 'ai', source: 'ClawFeed', score: 70, publishedAt: iso(0.1), fetchedAt: iso(0.1), threadId: 'T1' };
+  const ain = { id: 'ain', category: 'ai', source: 'AINews', score: 60, publishedAt: iso(0.2), fetchedAt: iso(0.2), threadId: 'T2' };
+  assert.deepEqual(selectBoard([claw, ain], 'ai', 1, now).map(e => e.id), ['ain']);
+});
+
+test('every board the digest renders is a board the contract accepts', () => {
+  for (const b of BOARDS) assert.ok(CATEGORIES.includes(b), `${b} is not a contract category`);
+  assert.ok(BOARDS.includes('christianity'), 'the Christianity board must be wired end to end');
 });

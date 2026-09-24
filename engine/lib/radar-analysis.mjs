@@ -2,7 +2,7 @@ import config from '../crucix.config.mjs';
 import {createLLMProvider} from './llm/index.mjs';
 import {writeFile} from 'node:fs/promises';
 import {selectionSystemPrompt,PERSONA_EN} from './persona.mjs';
-import {sourceTier,TIER_RANK} from './source-tier.mjs';
+import {sourceTier,TIER_RANK,sourceWeight} from './source-tier.mjs';
 import {judgeEdition} from './radar-judge.mjs';
 import {CATEGORIES} from './radar-contract.mjs';
 
@@ -70,7 +70,7 @@ async function selectByPersona(provider,pool){
     const TIER_BONUS={x:15,primary:8,media:0,data:0};
     for(const e of scored){
       e.tier=sourceTier(e.source);
-      e.rank=Math.min(100,(e.score||0)+(TIER_BONUS[e.tier]||0));
+      e.rank=Math.min(100,((e.score||0)+(TIER_BONUS[e.tier]||0))*sourceWeight(e.source));
     }
     scored.sort((x,y)=>(y.rank-x.rank)||(TIER_RANK[x.tier]-TIER_RANK[y.tier]));
     const per=new Map();const capped=[];
@@ -89,6 +89,23 @@ async function selectByPersona(provider,pool){
   }
 }
 function roundRobin(sorted,limit){const byCat=new Map();for(const e of sorted){const a=byCat.get(e.category)||[];if(a.length<5)a.push(e);byCat.set(e.category,a);}const lists=[...byCat.values()].filter(l=>l.length);const out=[];while(out.length<limit&&lists.some(l=>l.length)){for(const l of lists){if(out.length>=limit)break;if(l.length)out.push(l.shift());}}return out;}
+
+// Round-robin across boards so one busy board cannot monopolise the pool and
+// starve a quiet one before the model ever sees its items. This is how the AI
+// board used to crowd AINews out entirely (a fresh daily long-read never made
+// the 70 most recent), and how a new board would never get off the ground.
+function fairPool(sorted,limit){
+  const byCat=new Map();
+  for(const e of sorted){const a=byCat.get(e.category)||[];a.push(e);byCat.set(e.category,a);}
+  const lists=[...byCat.values()];
+  const out=[];
+  for(let i=0;out.length<limit;i++){
+    let added=false;
+    for(const list of lists){if(i<list.length&&out.length<limit){out.push(list[i]);added=true;}}
+    if(!added)break;
+  }
+  return out;
+}
 
 const ITEM_SYS=`あなたは日本語・英語・中国語の編集者です。与えられた候補だけを扱い、各言語の読者に自然な独立した文章を書きます。出力は JSON のみ。
 - 与えられた候補 ID を EACH 言語版に必ず一度ずつ、与えられた順序どおりに含める。ID を捏造しない。
@@ -216,9 +233,10 @@ const MIN_KEPT=3;
 export async function analyseRadar(events,markets){
   const provider=createLLMProvider({...config.llm,provider:process.env.RADAR_LLM_PROVIDER||config.llm.provider,model:process.env.RADAR_LLM_MODEL||config.llm.model});if(!provider?.isConfigured)throw new Error('Analysis provider unavailable');
   const sorted=[...events].sort((a,b)=>Date.parse(b.publishedAt||b.fetchedAt)-Date.parse(a.publishedAt||a.fetchedAt));
-  // Candidate pool (all eligible changed events across boards; 70 cap to prevent model JSON truncation),
+  // Candidate pool (all eligible changed events across boards; 70 cap to prevent
+  // model JSON truncation), filled board by board so no board is starved,
   // scored by the persona; the code then takes the top 3 per board.
-  const pool=sorted.slice(0,70);
+  const pool=fairPool(sorted,70);
   const picked=await selectByPersona(provider,pool);
   const candidateSymbols=['BTC-USD','ETH-USD','SOL-USD','^GSPC','^IXIC','^N225','CL=F','GC=F','NVDA','MSFT','GOOGL','META','AVGO','TSM','AMD','PLTR','SMH','7203.T','6758.T'];
   const freshMarkets=markets.filter(q=>Number.isFinite(q.price)&&q.price>0&&Date.now()-Date.parse(q.at)<5*86400000&&candidateSymbols.includes(q.symbol));

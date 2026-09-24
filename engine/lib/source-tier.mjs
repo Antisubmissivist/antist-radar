@@ -23,6 +23,7 @@ const BY_NAME = new Map(Object.entries({
   // --- x: windows into X/Twitter, where AI news breaks first -----------------
   ClawFeed: 'x',
   AINews: 'x',
+  X2RSS: 'x',
 
   // --- primary: the institution publishing its own decision ------------------
   Japan: 'primary',              // JMA
@@ -54,7 +55,29 @@ const BY_NAME = new Map(Object.entries({
   'BBC World': 'media',
   'Al Jazeera': 'media',
   'DW World': 'media',
+  // Christianity desks. The wires carry the big stories, but the religion
+  // specialists carry the ones that matter to a reader who follows the church.
+  'Religion News Service': 'media',
+  'Christianity Today': 'media',
+  'Vatican News': 'media',
+  Crux: 'media',
+  'Church Times': 'media',
+  'Christian Today': 'media',
+  'キリスト新聞': 'media',
 }));
+
+// How much a source's relevance score counts when ranking. Every pipe to X
+// carries overlapping stories, and one of them is a downstream digest of the
+// others rather than a pipe to the post itself: ClawFeed rewrites the same
+// tweets into Chinese prose and links to its own homepage, while AINews and
+// X2RSS link to the original post. The story should lead with the source a
+// reader can click through to, so ClawFeed is weighted below them — kept for
+// the stories only it carries, never leading with them.
+export const SOURCE_WEIGHT = { ClawFeed: 0.7 };
+export function sourceWeight(name) {
+  const w = SOURCE_WEIGHT[String(name || '')];
+  return typeof w === 'number' ? w : 1;
+}
 
 /**
  * Tier for a source name. Google News routes are labelled aggregators, so they

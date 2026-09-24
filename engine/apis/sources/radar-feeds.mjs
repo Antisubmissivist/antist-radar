@@ -36,11 +36,11 @@ function event(source,category,item) {
     publishedAt:item.publishedAt||null,fetchedAt:new Date().toISOString(),stage:item.stage||'announcement',deadlineAt:item.deadlineAt||null,
     evidence:(item.evidence||item.title).slice(0,1900),conditions:item.conditions||{},unknowns:item.unknowns||'Individual eligibility and applicability have not been established.'};
 }
-async function feed(source,category,url,stage='announcement') {
+async function feed(source,category,url,stage='announcement',limit=12) {
   const all=parseFeed(await request(url));
   // BOJ's own RSS still uses http links; upgrade only this verified official host.
   for(const item of all){const u=new URL(item.url);if(u.hostname==='www.boj.or.jp'){u.protocol='https:';item.url=u.href;}}
-  return {scanned:all.length,items:all.slice(0,12).map(x=>event(source,category,{...x,stage}))};
+  return {scanned:all.length,items:all.slice(0,limit).map(x=>event(source,category,{...x,stage}))};
 }
 async function releases() {
   const repos=['honojs/hono','cloudflare/workers-sdk','tailwindlabs/tailwindcss'];
@@ -117,6 +117,58 @@ async function clawfeed() {
   }
   return {items,scanned};
 }
+// AINews moved from news.smol.ai to Latent Space; the daily "[AINews]" post is
+// the same AI Twitter/Discord/Reddit roundup, and its body carries the original
+// posts as links. This reads the "AI Twitter Recap" section and emits ONE EVENT
+// PER TWEET with url = the tweet itself, so a reader clicks through to the post
+// that said it rather than to a digest that mentions it. (The old news.smol.ai
+// feed stopped at 2026-09-10; the recap continues on Latent Space.)
+async function ainews() {
+  const posts=parseFeed(await request('https://www.latent.space/feed')).filter(i=>/\[AINews\]/i.test(i.title));
+  const STATUS=/^https?:\/\/(?:x|twitter)\.com\/[^/]+\/status\/\d+/;
+  const items=[];let scanned=0;
+  for(const post of posts.slice(0,2)){
+    const html=await request(post.url,'text',{'User-Agent':'Mozilla/5.0 (compatible; AntistRadar/1.0)'});
+    const from=html.search(/id="[^"]*twitter[^"]*recap[^"]*"/i);
+    if(from<0) continue;
+    const to=html.search(/id="[^"]*reddit[^"]*recap[^"]*"/i);
+    const $=cheerio.load(html.slice(from, to>from?to:from+80000));
+    const seen=new Set();
+    const push=(a)=>{
+      const href=$(a).attr('href')||'';
+      if(!STATUS.test(href)||seen.has(href)) return;
+      seen.add(href);
+      const li=$(a).closest('li');
+      const text=(li.length?li.text():$(a).parent().text()).replace(/\s+/g,' ').trim();
+      scanned++;
+      if(text.length<40||items.length>=6) return;
+      items.push(event('AINews','ai',{sourceId:href,title:text.slice(0,220),url:href,publishedAt:post.publishedAt||null,evidence:text.slice(0,1900)}));
+    };
+    // One tweet per theme (h2 subsection) rather than the first N of the lead
+    // story: the recap opens with a dozen tweets about the same launch, and a
+    // board fed twelve versions of one story is a board with one card.
+    const subs=$('h2').toArray();
+    if(subs.length) for(const h2 of subs) push($(h2).nextUntil('h2').find('a[href]').filter((_,a)=>STATUS.test($(a).attr('href')||'')).first().get(0));
+    else $('a[href]').each((_,a)=>push(a));
+  }
+  return {items,scanned};
+}
+// X2RSS (RapidAPI) turns an X advanced-search query into RSS whose items link to
+// the original post. `min_faves` is what makes it "the tweets people actually
+// engaged with" instead of a firehose. Needs a RapidAPI key; the source is only
+// registered when X2RSS_API_KEY is set, so a missing key leaves no red badge.
+async function x2rss() {
+  const key=process.env.X2RSS_API_KEY;
+  if(!key) throw new Error('X2RSS_API_KEY unset');
+  const queries=[['ai','(AI OR OpenAI OR Anthropic OR LLM OR GPT) min_faves:1000 -filter:replies'],['tech','(Nvidia OR semiconductor OR datacenter OR chip) min_faves:500 -filter:replies']];
+  const items=[];let scanned=0;
+  for(const [category,q] of queries){
+    const xml=await request(`https://x2rss.p.rapidapi.com/rss?query=${encodeURIComponent(q)}`,'text',{'X-RapidAPI-Key':key,'X-RapidAPI-Host':'x2rss.p.rapidapi.com'});
+    const all=parseFeed(xml);scanned+=all.length;
+    items.push(...all.slice(0,6).map(x=>event('X2RSS',category,{...x,sourceId:x.url})));
+  }
+  return {items,scanned};
+}
 async function stocks() {
   const tickers=['^GSPC','NVDA','7203.T'];
   const items=[];let scanned=0;
@@ -143,12 +195,12 @@ export const FEEDS=[
   {name:'GitHub Releases',url:'https://docs.github.com/en/rest/releases/releases',collect:releases},
   {name:'ClawFeed',url:'https://clawfeed.kevinhe.io/',collect:clawfeed},
   // X has no open API, so the only way to read where AI news actually breaks is
-  // through something that already scrapes it. AINews (smol.ai) publishes a
-  // near-daily recap of AI Twitter/Discord and links out to the original posts
-  // (54 x.com links in the issue checked on 2026-09-13), which makes it a pipe
-  // to a primary source rather than downstream reporting. Tiered accordingly in
-  // lib/source-tier.mjs.
-  {name:'AINews',url:'https://news.smol.ai/',collect:()=>feed('AINews','ai','https://news.smol.ai/rss.xml')},
+  // through something that already scrapes it. These are windows into X, tiered
+  // 'x' in lib/source-tier.mjs. AINews links to the original posts; X2RSS is an
+  // engagement-ranked search (needs a RapidAPI key); ClawFeed rewrites the same
+  // tweets into prose without links, so it is weighted down rather than removed.
+  {name:'AINews',url:'https://www.latent.space/',collect:ainews},
+  ...(process.env.X2RSS_API_KEY?[{name:'X2RSS',url:'https://x2rss.p.rapidapi.com/',collect:x2rss}]:[]),
   {name:'Techmeme',url:'https://www.techmeme.com/',collect:()=>feed('Techmeme','tech','https://www.techmeme.com/feed.xml')},
   {name:'The Verge',url:'https://www.theverge.com/rss/index.xml',collect:()=>feed('The Verge','tech','https://www.theverge.com/rss/index.xml')},
   {name:'Ars Technica',url:'https://feeds.arstechnica.com/arstechnica/index',collect:()=>feed('Ars Technica','tech','https://feeds.arstechnica.com/arstechnica/index')},
@@ -171,6 +223,15 @@ export const FEEDS=[
   {name:'DW World',url:'https://rss.dw.com/rdf/rss-en-world',collect:()=>feed('DW World','geopolitics','https://rss.dw.com/rdf/rss-en-world')},
   {name:'Google News · 在留',url:'https://news.google.com/rss/search',collect:()=>gnews('Google News · 在留','japan-residence','在留資格 OR 出入国在留管理庁 OR 在留手続')},
   {name:'Google News · UR/住宅',url:'https://news.google.com/rss/search',collect:()=>gnews('Google News · UR/住宅','japan-life','UR賃貸 OR 公営住宅 募集')},
+  // Christianity desk. The wires carry the big church stories but the religion
+  // specialists carry the ones a reader who follows the church actually wants,
+  // so the board is fed from both: these feeds (prefill 'christianity') plus
+  // whatever the general sources file under it after classification.
+  {name:'Religion News Service',url:'https://religionnews.com/',collect:()=>feed('Religion News Service','christianity','https://religionnews.com/feed/',undefined,5)},
+  {name:'Christianity Today',url:'https://www.christianitytoday.com/',collect:()=>feed('Christianity Today','christianity','https://www.christianitytoday.com/feed/',undefined,5)},
+  {name:'Vatican News',url:'https://www.vaticannews.va/',collect:()=>feed('Vatican News','christianity','https://www.vaticannews.va/en.rss.xml',undefined,5)},
+  {name:'Crux',url:'https://cruxnow.com/',collect:()=>feed('Crux','christianity','https://cruxnow.com/feed',undefined,5)},
+  {name:'キリスト新聞',url:'https://christianpress.jp/',collect:()=>feed('キリスト新聞','christianity','https://christianpress.jp/feed/',undefined,5)},
 ];
 export async function collectFeeds() {
   return Promise.all(FEEDS.map(async f=>{

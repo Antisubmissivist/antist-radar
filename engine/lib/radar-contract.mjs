@@ -1,6 +1,6 @@
 // Shared publication boundary. Pure functions: safe to import in the Worker.
 export const LANGS = ['ja', 'en', 'zh'];
-export const CATEGORIES = ['ai', 'tech', 'japan-residence', 'japan-life', 'geopolitics', 'crypto', 'stocks'];
+export const CATEGORIES = ['ai', 'tech', 'japan-residence', 'japan-life', 'geopolitics', 'crypto', 'stocks', 'christianity'];
 // Per-field length ceilings. The judge enforces these too, so an over-long
 // card is dropped like any other bad card instead of reaching publicSnapshot
 // and taking the whole edition down with it.

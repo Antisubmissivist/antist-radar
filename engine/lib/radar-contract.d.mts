@@ -1,10 +1,10 @@
 export type Localized=Record<'ja'|'en'|'zh',string>;
-export interface RadarEvent {id:string;source:string;url:string;category:'ai'|'tech'|'japan-residence'|'japan-life'|'geopolitics'|'crypto'|'stocks';publishedAt:string|null;fetchedAt:string;stage:'announcement'|'draft'|'open'|'closed'|'withdrawn'|'unknown';deadlineAt:string|null;title:Localized;summary:Localized;audience:Localized;action:Localized;unknowns:Localized;evidence:string;change:'new'|'updated'|'unchanged';score:number}
+export interface RadarEvent {id:string;source:string;url:string;category:'ai'|'tech'|'japan-residence'|'japan-life'|'geopolitics'|'crypto'|'stocks'|'christianity';publishedAt:string|null;fetchedAt:string;stage:'announcement'|'draft'|'open'|'closed'|'withdrawn'|'unknown';deadlineAt:string|null;title:Localized;summary:Localized;audience:Localized;action:Localized;unknowns:Localized;evidence:string;change:'new'|'updated'|'unchanged';score:number}
 export interface Quote {symbol:string;name:string;price:number;changePct:number;at:string;source:string}
 export interface Source {name:string;status:'ok'|'quiet'|'degraded'|'unavailable'|'stale';count:number;url:string;fetchedAt:string}
 export interface Forecast {id:string;createdAt:string;dueAt:string;symbol:string;baseline:number;direction:'above'|'below';probability:number;claim:Localized;rationale:Localized;evidence:string[]}
 export interface Snapshot {schema:2;id:string;generatedAt:string;sweepMs:number;analysisStatus:'complete'|'degraded';digest:Localized;events:RadarEvent[];markets:Quote[];sources:Source[];forecasts:Forecast[]}
-export const CATEGORIES:readonly ['ai','tech','japan-residence','japan-life','geopolitics','crypto','stocks'];
+export const CATEGORIES:readonly ['ai','tech','japan-residence','japan-life','geopolitics','crypto','stocks','christianity'];
 export const FIELD_MAX:{title:number;summary:number;audience:number;action:number;unknowns:number};
 export const FORECAST_MAX:{claim:number;rationale:number};
 export function text(value:unknown,max?:number):string;

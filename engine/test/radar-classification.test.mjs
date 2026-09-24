@@ -53,6 +53,7 @@ const BOUNDARY_RULES = [
   ['上市公司的股票行为', 'stocks'],   // Metaplanet buyback despite holding bitcoin
   ['加密监管立法', 'crypto'],
   ['身份手续', 'japan-residence'],
+  ['宗教本身是事件主体', 'christianity'], // a church story, not a state story about religion
 ];
 
 test('every boundary rule the model kept failing is still spelled out', () => {

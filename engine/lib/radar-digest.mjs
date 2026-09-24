@@ -11,9 +11,9 @@ const LABEL = {
   en: { ai: 'AI', tech: 'Tech', 'japan-residence': 'Residency & rules', 'japan-life': 'Japan life', geopolitics: 'Geopolitics', crypto: 'Crypto', stocks: 'Stocks', christianity: 'Christianity' },
 };
 const T = {
-  zh: { title: '每日简报', forecast: '预测', none: '（今日无更新）', nof: '（暂无已发布预测）', more: '想看更多内容，请访问本站' },
-  ja: { title: 'デイリーブリーフ', forecast: '予測', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）', more: 'もっと見るなら本サイトへ' },
-  en: { title: 'Daily brief', forecast: 'Forecasts', none: '(no updates today)', nof: '(no published forecasts yet)', more: 'More updates on the site' },
+  zh: { title: '每日简报', forecast: '预测', none: '（今日无更新）', nof: '（暂无已发布预测）', more: '想看更多内容，请访问本站', colTitle: '标题', colBody: '内容', colLink: '链接' },
+  ja: { title: 'デイリーブリーフ', forecast: '予測', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）', more: 'もっと見るなら本サイトへ', colTitle: '見出し', colBody: '内容', colLink: 'リンク' },
+  en: { title: 'Daily brief', forecast: 'Forecasts', none: '(no updates today)', nof: '(no published forecasts yet)', more: 'More updates on the site', colTitle: 'Headline', colBody: 'Summary', colLink: 'Link' },
 };
 
 const cell = s => String(s ?? '').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
@@ -41,11 +41,20 @@ export function rankScore(score, dateStr, now = Date.now()) {
   const ageHours = Math.max(0, (now - ts) / 3600000);
   return s / Math.pow(ageHours / 48 + 1, 1.2);
 }
+// The number a card shows IS the sort key. The 48-hour gravity decay is folded
+// into that number instead of being a hidden second key, so "ordered by
+// relevance" stays literally true: a card with a bigger number is always above
+// one with a smaller number, and a reader can check the order by eye. An
+// unscored row is 0.
+export function currentScore(score, dateStr, now = Date.now()) {
+  const r = rankScore(score, dateStr, now);
+  return r > 0 ? Math.round(r) : 0;
+}
 export function selectBoard(events, board, n = 3, now = Date.now()) {
   const cand = (events || []).filter(e => e && e.category === board);
   const byRecency = (a, b) => Date.parse(b.publishedAt || b.fetchedAt || 0) - Date.parse(a.publishedAt || a.fetchedAt || 0);
   const scored = cand.filter(e => Number(e.score) > 0)
-    .map(e => ({ e, r: rankScore(e.score, e.publishedAt || e.fetchedAt, now) }))
+    .map(e => ({ e, r: currentScore(e.score, e.publishedAt || e.fetchedAt, now) }))
     .filter(x => x.r > 0).sort((a, b) => (b.r - a.r) || byRecency(a.e, b.e)).map(x => x.e);
   const unscored = cand.filter(e => !(Number(e.score) > 0)).sort(byRecency);
   // One card per story. The same event reported by Techmeme and by Decrypt is
@@ -74,7 +83,7 @@ export function buildMarkdown(s, lang = 'zh', boards) {
     const items = selectBoard(s.events, b, PER);
     out.push(`<details><summary>${EMOJI[b]} ${L[b]}（${items.length}）</summary>`, '');
     out.push('| 标题 | 内容 | 链接 |', '| --- | --- | --- |');
-    if (items.length) for (const e of items) { const dl = e.deadlineAt ? ('⏰ ' + String(e.deadlineAt).slice(0, 10) + ' · ') : ''; out.push(`| ${cut(e.title?.[lang], 60)} | ${cut(dl + (e.summary?.[lang] || e.action?.[lang]), 110)} | [链接](${e.url}) |`); }
+    if (items.length) for (const e of items) { const dl = e.deadlineAt ? ('⏰ ' + String(e.deadlineAt).slice(0, 10) + ' · ') : ''; out.push(`| ${cut(e.title?.[lang], 200)} | ${cut(dl + (e.summary?.[lang] || e.action?.[lang]), 200)} | [链接](${e.url}) |`); }
     else out.push(`| ${t.none} | — | — |`);
     out.push('', '</details>', '');
   }

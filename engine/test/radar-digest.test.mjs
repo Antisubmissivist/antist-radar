@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { selectBoard, rankScore, BOARDS } from '../lib/radar-digest.mjs';
+import { selectBoard, rankScore, currentScore, BOARDS } from '../lib/radar-digest.mjs';
 import { CATEGORIES } from '../lib/radar-contract.mjs';
 
 // selectBoard is the single rule the homepage and the Telegram digest share, so
@@ -58,4 +58,20 @@ test('only the requested board is considered', () => {
 test('every board the digest renders is a board the contract accepts', () => {
   for (const b of BOARDS) assert.ok(CATEGORIES.includes(b), `${b} is not a contract category`);
   assert.ok(BOARDS.includes('christianity'), 'the Christianity board must be wired end to end');
+});
+
+// The reader can check the order by eye, so the badge must be the sort key. A
+// board whose numbers are not descending is a bug report waiting to happen —
+// that is exactly how 58-above-60 was reported.
+test('the number on the card is the sort key: a board reads descending', () => {
+  const picked = selectBoard([
+    ev('old', { score: 88, days: 11 }),
+    ev('fresh', { score: 60, days: 0 }),
+    ev('mid', { score: 70, days: 2 }),
+  ], 'ai', 3, now);
+  const scores = picked.map(e => currentScore(e.score, e.publishedAt, now));
+  for (let i = 1; i < scores.length; i++) {
+    assert.ok(scores[i - 1] >= scores[i], `board must read descending, got ${scores.join(', ')}`);
+  }
+  assert.ok(scores[0] > 0);
 });

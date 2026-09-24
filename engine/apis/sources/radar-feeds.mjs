@@ -165,54 +165,50 @@ async function ainews() {
   }
   return {items,scanned};
 }
-// X2RSS (RapidAPI) turns an X advanced-search query into RSS whose items link to
-// the original post. `min_faves` is what makes it "the tweets people actually
-// engaged with" instead of a firehose. Needs a RapidAPI key; the source is only
-// registered when X2RSS_API_KEY is set, so a missing key leaves no red badge.
-async function x2rss() {
-  const key=process.env.X2RSS_API_KEY;
-  if(!key) throw new Error('X2RSS_API_KEY unset');
-  const queries=[['ai','(AI OR OpenAI OR Anthropic OR LLM OR GPT) min_faves:1000 -filter:replies'],['tech','(Nvidia OR semiconductor OR datacenter OR chip) min_faves:500 -filter:replies']];
-  const items=[];let scanned=0;
-  for(const [category,q] of queries){
-    const xml=await request(`https://x2rss.p.rapidapi.com/rss?query=${encodeURIComponent(q)}`,'text',{'X-RapidAPI-Key':key,'X-RapidAPI-Host':'x2rss.p.rapidapi.com'});
-    const all=parseFeed(xml);scanned+=all.length;
-    items.push(...all.slice(0,6).map(x=>event('X2RSS',category,{...x,sourceId:x.url})));
-  }
-  return {items,scanned};
-}
+// (An X2RSS collector lived here; RapidAPI's x-twitter2 replaced it — one X
+// source, the one whose free tier lasts.)
 // Yahoo's per-ticker headline feed (feeds.finance.yahoo.com/rss/2.0/headline)
 // started answering HTTP 500 for every symbol, which is why the source showed
 // as unavailable. Yahoo's own market RSS still works, so read that instead.
 // X search — the firehose, with a link to the post.
 //
-// TwitterAPIs (api.twitterapis.com) runs the full X advanced-search operator set
-// (`min_faves:` is what makes it "the tweets people engaged with") and returns
-// each tweet's id and author, so the card links to the post itself. Pay-per-call:
-// $0.0008 for ~20 tweets, $0.50 in free credits at signup (~625 calls).
+// X is where AI news breaks first, so a window into it is the one source that
+// is genuinely upstream of everything else. RapidAPI's "X / Twitter"
+// (x-twitter2) runs the advanced-search operator syntax (`min_faves:` is what
+// makes it "the tweets people engaged with") and returns each tweet's id and
+// author, so the card links to the post itself.
 //
-// That quota is why this polls SIX times a day, not hourly: the sweep runs every
-// hour, so the other eighteen are skipped. One query per poll is ~180 calls a
-// month — inside the free credits for three months, and a $10 top-up after that
-// lasts years. Raising the poll count is a one-line change here.
-const X_POLL_HOURS_UTC = [0, 4, 8, 12, 16, 20]; // 09/13/17/21/01/05 JST
+// Free tier is 100 calls a month, so this polls THREE times a day at one query
+// each (~90 calls) — inside the free quota for good, no card. Raising the poll
+// count is the one line below.
+const X_POLL_HOURS_UTC = [23, 5, 11]; // 08/14/20 JST
 const xDue = () => X_POLL_HOURS_UTC.includes(new Date().getUTCHours());
+const xId = (t) => String(t?.tweet_id || t?.id_str || t?.id || t?.rest_id || '');
+const xHandle = (t) => { const u = t?.user || t?.author || {}; return String(u.screen_name || u.username || u.handle || t?.screen_name || t?.username || ''); };
+const xText = (t) => String(t?.text || t?.full_text || t?.tweet_text || t?.content || '').replace(/\s+/g, ' ').trim();
 async function xsearch() {
-  const key = process.env.TWITTERAPIS_KEY;
-  if (!key) throw new Error('TWITTERAPIS_KEY unset');
+  const key = process.env.XTWITTER_API_KEY;
+  if (!key) throw new Error('XTWITTER_API_KEY unset');
   if (!xDue()) return { items: [], scanned: 0, status: 'quiet' };
   const q = '(AI OR OpenAI OR Anthropic OR Nvidia OR Taiwan OR Iran OR Ukraine OR Bitcoin OR "Federal Reserve") min_faves:1000 -filter:replies';
-  const params = new URLSearchParams({ query: q, product: 'Top', compact: '1' });
-  const j = await request(`https://api.twitterapis.com/twitter/tweet/advanced_search?${params}`, 'json', { Authorization: `Bearer ${key}` });
-  const tweets = Array.isArray(j?.tweets) ? j.tweets : [];
-  const items = tweets.filter(t => t?.id && t?.author?.username).slice(0, 8).map(t => event('X', 'ai', {
-    sourceId: `x:${t.id}`,
-    title: String(t.text || '').replace(/\s+/g, ' ').slice(0, 220),
-    url: `https://x.com/${t.author.username}/status/${t.id}`,
-    publishedAt: iso(t.created_at),
-    evidence: `${t.author.name || t.author.username} (@${t.author.username}) · ${t.favorite_count || 0} likes · ${t.retweet_count || 0} retweets\n${String(t.text || '').slice(0, 900)}`,
-  }));
-  return { items, scanned: tweets.length };
+  const params = new URLSearchParams({ q, type: 'Top', count: '20' });
+  const j = await request(`https://x-twitter2.p.rapidapi.com/search?${params}`, 'json', {
+    'X-RapidAPI-Key': key, 'X-RapidAPI-Host': 'x-twitter2.p.rapidapi.com',
+  });
+  // The wrapper's envelope is not documented; accept the shapes these APIs use.
+  const list = Array.isArray(j?.results) ? j.results : Array.isArray(j?.tweets) ? j.tweets : Array.isArray(j?.data) ? j.data : [];
+  const items = list.map(t => {
+    const id = xId(t), h = xHandle(t), text = xText(t);
+    if (!id || !h || text.length < 20) return null;
+    return event('X', 'ai', {
+      sourceId: `x:${id}`,
+      title: text.slice(0, 220),
+      url: `https://x.com/${h}/status/${id}`,
+      publishedAt: iso(t?.created_at || t?.createdAt || t?.date),
+      evidence: `${t?.user?.name || t?.author?.name || h} (@${h})\n${text.slice(0, 900)}`,
+    });
+  }).filter(Boolean).slice(0, 8);
+  return { items, scanned: list.length };
 }
 async function stocks() {
   const items=[];let scanned=0;
@@ -244,8 +240,7 @@ export const FEEDS=[
   // engagement-ranked search (needs a RapidAPI key); ClawFeed rewrites the same
   // tweets into prose without links, so it is weighted down rather than removed.
   {name:'AINews',url:'https://www.latent.space/',collect:ainews},
-  ...(process.env.TWITTERAPIS_KEY?[{name:'X',url:'https://api.twitterapis.com/',collect:xsearch}]:[]),
-  ...(process.env.X2RSS_API_KEY?[{name:'X2RSS',url:'https://x2rss.p.rapidapi.com/',collect:x2rss}]:[]),
+  ...(process.env.XTWITTER_API_KEY?[{name:'X',url:'https://rapidapi.com/xtwitter/api/x-twitter2',collect:xsearch}]:[]),
   {name:'Techmeme',url:'https://www.techmeme.com/',collect:()=>feed('Techmeme','tech','https://www.techmeme.com/feed.xml')},
   {name:'The Verge',url:'https://www.theverge.com/rss/index.xml',collect:()=>feed('The Verge','tech','https://www.theverge.com/rss/index.xml')},
   {name:'Ars Technica',url:'https://feeds.arstechnica.com/arstechnica/index',collect:()=>feed('Ars Technica','tech','https://feeds.arstechnica.com/arstechnica/index')},

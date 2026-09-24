@@ -42,15 +42,19 @@ export async function searchPosts(query, opts = {}) {
   return safeFetch(`${PDS}/xrpc/app.bsky.feed.searchPosts?${params}`, { headers: { Authorization: `Bearer ${s.jwt}` } });
 }
 
-// Compact a post for briefing output
+// Compact a post for briefing output. The URL matters: without it the item
+// cannot become a card (every card links to the original post).
 function compactPost(post) {
   const record = post?.record || post;
   const author = post?.author;
+  const rkey = String(post?.uri || '').split('/').pop();
+  const handle = author?.handle;
   return {
     text: (record?.text || '').slice(0, 200),
-    author: author?.handle || author?.displayName || 'unknown',
+    author: handle || author?.displayName || 'unknown',
     date: record?.createdAt || null,
     likes: post?.likeCount ?? 0,
+    url: handle && rkey ? `https://bsky.app/profile/${handle}/post/${rkey}` : null,
   };
 }
 

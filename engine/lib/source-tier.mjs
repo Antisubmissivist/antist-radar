@@ -23,8 +23,8 @@ const BY_NAME = new Map(Object.entries({
   // --- x: windows into X/Twitter, where AI news breaks first -----------------
   ClawFeed: 'x',
   AINews: 'x',
-  X2RSS: 'x',
   X: 'x',
+  Bluesky: 'x',
 
   // --- primary: the institution publishing its own decision ------------------
   Japan: 'primary',              // JMA

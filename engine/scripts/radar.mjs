@@ -23,6 +23,15 @@ const raw=feeds.flatMap(f=>f.items);
 function add(source,category,title,url,evidence,at=null,stableId=url) {if(!title||!url?.startsWith('https:'))return;raw.push({id:eventId(source,stableId),source,category,title:String(title).slice(0,280),url,publishedAt:at||null,fetchedAt:sweep.crucix.timestamp,stage:'announcement',deadlineAt:null,evidence:String(evidence||title).slice(0,1900),unknowns:'Applicability needs verification in the original source.'});}
 for(const a of (s.AIInfra?.hardSignals||[]).slice(0,8))add(a.from,'ai',a.title,a.url,a.title,a.at);
 for(const a of (s.GDELT?.allArticles||[]).slice(0,5))add('GDELT','geopolitics',a.title,a.url,a.title);
+// Social and humanitarian feeds carry the story first-hand, so they feed the
+// pool like any other source instead of being collected and thrown away. (Reddit
+// needs OAuth credentials it does not have — it reports no_key — so it stays out
+// until someone registers an app.) Category is a prefill; the model re-reads it.
+const at=v=>Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
+for(const topic of ['conflict','markets','health'])for(const p of (s.Bluesky?.topics?.[topic]||[]).slice(0,4))if(p.url)add('Bluesky','geopolitics',p.text,p.url,p.text,at(p.date));
+for(const o of (s.WHO?.diseaseOutbreakNews||[]).slice(0,5))if(o.url)add('WHO','geopolitics',o.title,o.url,o.summary||o.title,at(o.date));
+for(const r of (s.ReliefWeb?.latestReports||[]).slice(0,5))if(r.url)add('ReliefWeb','geopolitics',r.title,r.url,r.title,at(r.date));
+for(const a of (s.OFAC?.recent||[]).slice(0,5))if(a.url)add('OFAC','geopolitics',a.title,a.url,a.title,at(a.date));
 for(const a of (s['CISA-KEV']?.vulnerabilities||[]).slice(0,5))add('CISA-KEV','tech',`${a.cveID}: ${a.vulnerabilityName}`,`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,`${a.vendorProject} ${a.product}. ${a.shortDescription||''}. ${a.requiredAction||''}. Federal remediation due date is not a deadline applying to every reader.`,null,a.cveID);
 const all=[...new Map(raw.map(x=>[x.id,x])).values()].map(x=>({...x,title:scrub(x.title),evidence:scrub(x.evidence)}));
 // Drop items with no usable content (unreadable/missing extraction): only real news stays.

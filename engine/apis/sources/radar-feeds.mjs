@@ -182,28 +182,40 @@ async function ainews() {
 // each (~90 calls) — inside the free quota for good, no card. Raising the poll
 // count is the one line below.
 const X_POLL_HOURS_UTC = [23, 5, 11]; // 08/14/20 JST
+const X_LIST_HOUR_UTC = 5;            // the 14:00 JST poll reads the list instead
+// AINews' "544 AI Twitters" list — the same firehose AINews summarises daily.
+// Override with X_LIST_ID to point at another public list.
+const X_LIST_ID = process.env.X_LIST_ID || '1585430245762441216';
 const xDue = () => X_POLL_HOURS_UTC.includes(new Date().getUTCHours());
+function xTweets(j, viaList) {
+  const tl = viaList ? j?.data?.list?.tweets_timeline?.timeline : j?.data?.search_by_raw_query?.search_timeline?.timeline;
+  return ((tl?.instructions) || []).flatMap(i => i?.entries || [])
+    .map(e => e?.content?.itemContent?.tweet_results?.result).filter(t => t && t.rest_id);
+}
 async function xsearch() {
   const key = process.env.XTWITTER_API_KEY;
   if (!key) throw new Error('XTWITTER_API_KEY unset');
   if (!xDue()) return { items: [], scanned: 0, status: 'quiet' };
+  const viaList = new Date().getUTCHours() === X_LIST_HOUR_UTC;
   const q = '(AI OR OpenAI OR Anthropic OR Nvidia OR Taiwan OR Iran OR Ukraine OR Bitcoin OR "Federal Reserve") min_faves:1000 -filter:replies';
-  const params = new URLSearchParams({ q, type: 'Top', count: '20' });
-  // The path is /Search — capital S. (Lowercase /search answers 404, and without
-  // a key the auth check fires first and answers 401, which reads like it exists.)
-  const j = await request(`https://x-twitter2.p.rapidapi.com/Search?${params}`, 'json', {
-    'X-RapidAPI-Key': key, 'X-RapidAPI-Host': 'x-twitter2.p.rapidapi.com',
-  });
-  // x-twitter2 proxies X's GraphQL verbatim: the tweets live in the timeline
-  // instructions, not in a plain array.
-  const entries = ((j?.data?.search_by_raw_query?.search_timeline?.timeline?.instructions) || []).flatMap(i => i?.entries || []);
-  const tweets = entries.map(e => e?.content?.itemContent?.tweet_results?.result).filter(t => t && t.rest_id);
+  // One poll is one call against a 100/month free tier, so the day's three polls
+  // split: two keyword searches and one list timeline. The list catches the
+  // accounts that matter even when a post does not go viral; the search catches
+  // whatever the wider platform is amplifying.
+  const url = viaList
+    ? `https://x-twitter2.p.rapidapi.com/v2/ListTimeline/?count=20&list_id=${encodeURIComponent(X_LIST_ID)}`
+    : `https://x-twitter2.p.rapidapi.com/Search?${new URLSearchParams({ q, type: 'Top', count: '20' })}`;
+  const j = await request(url, 'json', { 'X-RapidAPI-Key': key, 'X-RapidAPI-Host': 'x-twitter2.p.rapidapi.com' });
+  const tweets = xTweets(j, viaList);
+  // The list is a firehose with no engagement filter of its own, so rank it by
+  // likes and keep the top of it; the search already comes back "Top".
+  if (viaList) tweets.sort((a, b) => (b.legacy?.favorite_count || 0) - (a.legacy?.favorite_count || 0));
   const items = tweets.map(t => {
     const l = t.legacy || {};
     const u = t.core?.user_results?.result?.legacy || {};
     const text = String(t.note_tweet?.note_tweet_results?.result?.text || l.full_text || '').replace(/\s+/g, ' ').trim();
     const handle = String(u.screen_name || '');
-    if (!handle || text.length < 20) return null;
+    if (!handle || text.length < 40 || /^RT @/.test(text)) return null;
     return event('X', 'ai', {
       sourceId: `x:${t.rest_id}`,
       title: text.slice(0, 220),

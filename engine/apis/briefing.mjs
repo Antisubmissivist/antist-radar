@@ -31,9 +31,10 @@ import { briefing as comtrade } from './sources/comtrade.mjs';
 // === Tier 3: Weather, Environment, Technology, Social ===
 import { briefing as noaa } from './sources/noaa.mjs';
 import { briefing as bluesky } from './sources/bluesky.mjs';
-// Reddit import removed 2026-09-24 — Reddit closed self-service API access in
-// Nov 2025 (approval-only, "only where Devvit fails") and its public JSON
-// endpoint answers 403, so there is no path that works without a third party.
+// Reddit is gone (file deleted 2026-09-24). Reddit closed self-service API
+// access in Nov 2025 — approval-only, and only where Devvit cannot do the job —
+// and its public JSON endpoint answers 403, so no path works without a third
+// party. A RapidAPI scraper could replace it if that ever seems worth a key.
 import { briefing as telegram } from './sources/telegram.mjs';
 
 // === Tier 4: Space & Satellites ===

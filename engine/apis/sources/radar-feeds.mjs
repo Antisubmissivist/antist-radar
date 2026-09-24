@@ -15,13 +15,25 @@ export const scrub=v=>{let s=String(v??'');for(const r of SCRUB)s=s.replace(r,'[
 const NOISE=/^(\s*(subscribe|sign ?in|sign ?up|log ?in|read more|share|advertisement|sponsored|all rights reserved|cookies?|accept all|privacy policy|terms of (use|service))\b)/i;
 export const usableEvidence=(evidence,title)=>{const t=String(evidence||'').replace(/\s+/g,' ').trim();if(!t||/\[object object\]/i.test(t))return false;if(t===String(title||'').replace(/\s+/g,' ').trim())return false;if(t.length<40)return false;if(NOISE.test(t))return false;return true;};
 const iso=v=>Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
-export async function request(url, type='text', headers={}) {
+async function requestOnce(url, type, headers) {
   const r=await fetch(url,{headers:{'User-Agent':'AntistRadar/1.0 (+https://radar.antist.ai)',...headers},signal:AbortSignal.timeout(24000)});
-  if(!r.ok) throw new Error(`HTTP ${r.status}`);
+  if(!r.ok){const e=new Error(`HTTP ${r.status}`);e.status=r.status;throw e;}
   const reader=r.body.getReader();const chunks=[];let size=0;
   for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>64_000_000){await reader.cancel();throw new Error('Response too large');}chunks.push(value);}
   const raw=Buffer.concat(chunks).toString('utf8');
   return type==='json'?JSON.parse(raw):raw;
+}
+// One retry. Feeds flake under the sweep's 60-way concurrency (a slow host times
+// out, a CDN returns 5xx once) and a single failure paints a source red for the
+// whole hour. A 4xx is the caller's problem, not the network's, so it is not
+// retried.
+export async function request(url, type='text', headers={}) {
+  try { return await requestOnce(url, type, headers); }
+  catch(e) {
+    if(e.status && e.status < 500) throw e;
+    await new Promise(r => setTimeout(r, 1500));
+    return requestOnce(url, type, headers);
+  }
 }
 export function parseFeed(raw) {
   const d=parser.parse(raw);const root=d.RDF||d.rss?.channel||d.feed;

@@ -44,12 +44,25 @@ export function rankScore(score, dateStr, now = Date.now()) {
 export function selectBoard(events, board, n = 3, now = Date.now()) {
   const cand = (events || []).filter(e => e && e.category === board);
   const byRecency = (a, b) => Date.parse(b.publishedAt || b.fetchedAt || 0) - Date.parse(a.publishedAt || a.fetchedAt || 0);
-  const ranked = cand.filter(e => Number(e.score) > 0)
+  const scored = cand.filter(e => Number(e.score) > 0)
     .map(e => ({ e, r: rankScore(e.score, e.publishedAt || e.fetchedAt, now) }))
-    .filter(x => x.r > 0).sort((a, b) => (b.r - a.r) || byRecency(a.e, b.e)).slice(0, n).map(x => x.e);
-  const have = new Set(ranked.map(e => e.id));
-  const rest = ranked.length < n ? cand.filter(e => !have.has(e.id)).sort(byRecency).slice(0, n - ranked.length) : [];
-  return [...ranked, ...rest];
+    .filter(x => x.r > 0).sort((a, b) => (b.r - a.r) || byRecency(a.e, b.e)).map(x => x.e);
+  const unscored = cand.filter(e => !(Number(e.score) > 0)).sort(byRecency);
+  // One card per story. The same event reported by Techmeme and by Decrypt is
+  // one story with two sources, not two of the board's three slots — and the
+  // story rail on the card already lists every source, so nothing is hidden.
+  // Walking the ranking and skipping a thread once it has a card frees the slot
+  // for the next genuinely different story instead of a same-story duplicate.
+  const picked = [];
+  const seenThreads = new Set();
+  for (const e of [...scored, ...unscored]) {
+    const key = e.threadId || e.id;
+    if (seenThreads.has(key)) continue;
+    seenThreads.add(key);
+    picked.push(e);
+    if (picked.length >= n) break;
+  }
+  return picked;
 }
 
 export function buildMarkdown(s, lang = 'zh', boards) {

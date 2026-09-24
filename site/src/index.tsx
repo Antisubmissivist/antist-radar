@@ -224,8 +224,10 @@ function rowToEvent(r:Record<string,unknown>):any{const j=(v:unknown)=>{try{retu
 // The site keeps every event with a relevance score and the board pages sort by
 // that score; the homepage now does the same, over all retained events, so the
 // three cards leading a board are the three highest-scored for that board.
-// Unscored rows are the fallback only (newest first), never a filter.
-const BOARD_CANDIDATES=12;
+// Unscored rows are the fallback only (newest first), never a filter. The pool
+// is deliberately deeper than the 3 cards shown: selectBoard keeps one card per
+// story thread, so a cluster of same-story reports must not eat the whole pool.
+const BOARD_CANDIDATES=30;
 async function boardCandidates(env:Bindings,s:Snapshot|null){
   const lists=new Map<string,any[]>();
   await Promise.all((BOARDS as readonly string[]).map(async b=>{
@@ -233,15 +235,14 @@ async function boardCandidates(env:Bindings,s:Snapshot|null){
     const m=new Map<string,any>();
     for(const r of ((res as any).results||[]) as Record<string,unknown>[]){const e=rowToEvent(r);if(e&&e.id)m.set(e.id,e);}
     // The snapshot is the newest edition and wins on editorial content, but its
-    // `fetchedAt` is this sweep's fetch time — a story the engine re-surfaced
-    // today would look brand new and outrank genuinely fresh news (that is how
-    // an 11-day-old item with no published_at climbed back to the top of its
-    // board). The archive row's first_seen is the stable age, so it decides the
-    // decay; only the fields the card shows come from the snapshot.
+    // `fetchedAt` is this sweep's fetch time and it carries no thread_id — a
+    // story the engine re-surfaced today would look brand new and outrank
+    // genuinely fresh news, and it would lose its story rail. The archive row
+    // supplies the age AND the thread; the snapshot supplies the card's text.
     for(const e of (s?.events||[])){
       if(!e||!e.id||e.category!==b)continue;
       const archived=m.get(e.id);
-      m.set(e.id,archived?{...e,publishedAt:archived.publishedAt,fetchedAt:archived.fetchedAt}:e);
+      m.set(e.id,archived?{...e,publishedAt:archived.publishedAt,fetchedAt:archived.fetchedAt,threadId:archived.threadId}:e);
     }
     lists.set(b,Array.from(m.values()));
   }));

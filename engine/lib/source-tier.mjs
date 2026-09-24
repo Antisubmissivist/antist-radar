@@ -60,7 +60,6 @@ const BY_NAME = new Map(Object.entries({
   'Religion News Service': 'media',
   'Christianity Today': 'media',
   'Vatican News': 'media',
-  Crux: 'media',
   'Church Times': 'media',
   'Christian Today': 'media',
   'キリスト新聞': 'media',

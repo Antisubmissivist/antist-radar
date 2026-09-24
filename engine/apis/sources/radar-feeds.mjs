@@ -244,7 +244,10 @@ export const FEEDS=[
   {name:'Religion News Service',url:'https://religionnews.com/',collect:()=>feed('Religion News Service','christianity','https://religionnews.com/feed/',undefined,5)},
   {name:'Christianity Today',url:'https://www.christianitytoday.com/',collect:()=>feed('Christianity Today','christianity','https://www.christianitytoday.com/feed/',undefined,5)},
   {name:'Vatican News',url:'https://www.vaticannews.va/',collect:()=>feed('Vatican News','christianity','https://www.vaticannews.va/en.rss.xml',undefined,5)},
-  {name:'Crux',url:'https://cruxnow.com/',collect:()=>feed('Crux','christianity','https://cruxnow.com/feed',undefined,5)},
+  // Crux removed 2026-09-24: it answers in 1-2s from a normal line but returns
+  // HTTP 403 from the GitHub runner's datacenter IP (Cloudflare bot rule).
+  // Nothing on our side fixes that without a proxy, and four other Christianity
+  // feeds already cover the board.
   {name:'キリスト新聞',url:'https://christianpress.jp/',collect:()=>feed('キリスト新聞','christianity','https://christianpress.jp/feed/',undefined,5)},
 ];
 // The X pipes overlap by design: AINews and ClawFeed both summarise the same

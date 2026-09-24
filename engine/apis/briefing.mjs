@@ -8,7 +8,7 @@ import { pathToFileURL } from 'node:url';
 import { auditSources } from '../lib/health.mjs';
 
 // === Tier 1: Core OSINT & Geopolitical ===
-import { briefing as gdelt } from './sources/gdelt.mjs';
+// GDELT import removed 2026-09-24 — its API host is unreachable (see runSource list).
 import { briefing as opensky } from './sources/opensky.mjs';
 import { briefing as firms } from './sources/firms.mjs';
 import { briefing as ships } from './sources/ships.mjs';
@@ -74,7 +74,10 @@ export async function fullBriefing() {
 
   const allPromises = [
     // Tier 1: Core OSINT & Geopolitical
-    runSource('GDELT', gdelt),
+    // GDELT was removed 2026-09-24: its API host (api.gdeltproject.org) is
+    // unreachable — TCP connect times out from both a residential line and the
+    // GitHub runner, while gdeltproject.org itself answers in 0.4s. Nothing on
+    // our side can fix a host we cannot open a socket to.
     runSource('OpenSky', opensky),
     runSource('FIRMS', firms),
     runSource('Maritime', ships),

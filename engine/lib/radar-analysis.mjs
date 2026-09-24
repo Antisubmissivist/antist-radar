@@ -232,8 +232,43 @@ async function runItems(provider,candidates){
 const KEEP_RATIO=0.8;
 const MIN_KEPT=3;
 
+// The digest is the one paragraph every reader sees and the only call whose
+// failure blocks the whole edition, so it gets more attempts than the batches
+// and a short backoff between them. When the provider is answering with an
+// instant non-answer (a canned refusal) this costs nothing; when it is merely
+// slow the backoff gives it room. It never falls back to raw text — a digest
+// that cannot be written is a digest that is not published.
+async function digestOnce(provider,candidates){
+  const payload=JSON.stringify(candidates.map(e=>({title:typeof e.title==='object'?(e.title.zh||e.title.en||Object.values(e.title)[0]):e.title,category:e.category})));
+  for(let t=1;t<=3;t++){
+    try{const r=await provider.complete(DIGEST_SYS,payload,{maxTokens:8000,timeout:90000});const j=parseJson(r.text);if(j&&typeof j.ja==='string'&&typeof j.en==='string'&&typeof j.zh==='string')return j;}catch(e){console.error('[radar] digest attempt',t,'failed:',e.message);}
+    await new Promise(r=>setTimeout(r,1500*t));
+  }
+  return null;
+}
+// Forecasts are optional: a bad or missing one is dropped by the judge, never
+// fatal. Retry a little, then let it go.
+async function forecastOnce(provider,freshMarkets,catalysts){
+  const payload=JSON.stringify({markets:freshMarkets,catalysts});
+  for(let t=1;t<=3;t++){
+    try{const r=await provider.complete(FORECAST_SYS,payload,{maxTokens:6000,timeout:90000});const j=parseJson(r.text);if(j&&Array.isArray(j.forecasts))return j;}catch(e){console.error('[radar] forecast attempt',t,'failed:',e.message);}
+    await new Promise(r=>setTimeout(r,1500*t));
+  }
+  return null;
+}
+
 export async function analyseRadar(events,markets){
   const provider=createLLMProvider({...config.llm,provider:process.env.RADAR_LLM_PROVIDER||config.llm.provider,model:process.env.RADAR_LLM_MODEL||config.llm.model});if(!provider?.isConfigured)throw new Error('Analysis provider unavailable');
+  // A provider-wide outage is not something more retries on the same endpoint
+  // can fix — opencode-go once answered every call with a canned Chinese refusal
+  // for three hours. When a second provider is configured, the final attempt
+  // runs on it, so one vendor's bad afternoon cannot leave the site frozen.
+  const fallback=(()=>{
+    const name=String(process.env.RADAR_LLM_FALLBACK_PROVIDER||'minimax').toLowerCase();
+    if(name===provider.name)return null;
+    const p=createLLMProvider({provider:name,apiKey:process.env.LLM_API_KEY,model:process.env.RADAR_LLM_FALLBACK_MODEL||'MiniMax-M3'});
+    return p?.isConfigured?p:null;
+  })();
   const sorted=[...events].sort((a,b)=>Date.parse(b.publishedAt||b.fetchedAt)-Date.parse(a.publishedAt||a.fetchedAt));
   // Candidate pool (all eligible changed events across boards; 70 cap to prevent
   // model JSON truncation), filled board by board so no board is starved,
@@ -256,11 +291,13 @@ export async function analyseRadar(events,markets){
     }));
   let lastError;
   for(let attempt=1;attempt<=3;attempt++){
+    const llm=(attempt===3&&fallback)?fallback:provider;
+    if(llm!==provider)console.error(JSON.stringify({event:'analysis-fallback-provider',provider:llm.name,attempt}));
     try{
       const [lanes,dig,fc]=await Promise.all([
-        runItems(provider,candidates),
-        (async()=>{for(let t=1;t<=2;t++){try{const r=await provider.complete(DIGEST_SYS,JSON.stringify(candidates.map(e=>({title:typeof e.title==='object'?(e.title.zh||e.title.en||Object.values(e.title)[0]):e.title,category:e.category}))),{maxTokens:8000,timeout:120000});const j=parseJson(r.text);if(j&&typeof j.ja==='string'&&typeof j.en==='string'&&typeof j.zh==='string')return j;}catch(e){console.error('[radar] digest attempt',t,'failed:',e.message);}}return null;})(),
-        (async()=>{for(let t=1;t<=2;t++){try{const r=await provider.complete(FORECAST_SYS,JSON.stringify({markets:freshMarkets,catalysts}),{maxTokens:6000,timeout:120000});const j=parseJson(r.text);if(j&&Array.isArray(j.forecasts))return j;}catch(e){console.error('[radar] forecast attempt',t,'failed:',e.message);}}return null;})(),
+        runItems(llm,candidates),
+        digestOnce(llm,candidates),
+        forecastOnce(llm,freshMarkets,catalysts),
       ]);
       const have=new Set(lanes.en.map(i=>i&&i.id));
       const missing=candidates.filter(c=>!have.has(c.id));

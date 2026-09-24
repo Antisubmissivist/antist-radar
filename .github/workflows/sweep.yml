@@ -32,11 +32,10 @@ jobs:
           node-version: '24'
           cache: npm
       - run: npm ci
-      - uses: actions/cache@v4
-        with:
-          path: engine/runs/decision-state.json
-          key: radar-state-${{ github.run_id }}
-          restore-keys: radar-state-
+      # The decision state lives in R2 now (state/decision-state.json), pushed and
+      # pulled through the Worker. The old actions/cache of the local file was
+      # left behind: it was keyed by run_id, so every sweep wrote a new ~10KB
+      # entry that no later run could ever restore.
       - run: npm test
       - run: node scripts/radar.mjs --push
         working-directory: engine

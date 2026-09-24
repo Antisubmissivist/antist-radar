@@ -17,6 +17,11 @@ jobs:
       LLM_MODEL: ${{ secrets.LLM_MODEL }}
       LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
       OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      # Final-attempt fallback: a sibling model on the same Go plan. A canned
+      # refusal comes from a bad backend, so a different model escapes it, and
+      # it needs no second key (the old MiniMax fallback ran out of credits).
+      RADAR_LLM_FALLBACK_PROVIDER: opencode
+      RADAR_LLM_FALLBACK_MODEL: glm-5.3-flash
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}
       FIRMS_MAP_KEY: ${{ secrets.FIRMS_MAP_KEY }}
       EIA_API_KEY: ${{ secrets.EIA_API_KEY }}

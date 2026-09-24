@@ -257,18 +257,31 @@ async function forecastOnce(provider,freshMarkets,catalysts){
   return null;
 }
 
+// Pick the model the final attempt runs on. A provider-wide outage is not
+// something more retries on the same endpoint can fix — opencode-go once
+// answered every call with a canned Chinese refusal for three hours.
+//
+// The fallback is now a DIFFERENT MODEL ON THE SAME VENDOR (GLM-5.3-Flash on
+// Go) rather than a different vendor. A canned refusal comes from a bad
+// backend, not a bad model, so a sibling model is enough to escape it — and it
+// shares the OPENCODE_API_KEY already in use, so there is no second key to run
+// dry (the old MiniMax fallback died of "Token Plan usage limit reached" the
+// first time it was needed). Exported so the guard that a fallback actually
+// exists is covered by a test: the previous rule returned null whenever the
+// vendor matched, which would silently disable the fallback altogether.
+export function selectFallbackProvider(primary){
+  const name=String(process.env.RADAR_LLM_FALLBACK_PROVIDER||'opencode').toLowerCase();
+  const model=String(process.env.RADAR_LLM_FALLBACK_MODEL||'glm-5.3-flash');
+  // Same vendor is fine as long as the model differs: a different model is a
+  // different backend. Only a genuinely identical target is pointless.
+  if(name===primary.name&&model===primary.model)return null;
+  const p=createLLMProvider({provider:name,apiKey:process.env.LLM_API_KEY,model});
+  return p?.isConfigured?p:null;
+}
+
 export async function analyseRadar(events,markets){
   const provider=createLLMProvider({...config.llm,provider:process.env.RADAR_LLM_PROVIDER||config.llm.provider,model:process.env.RADAR_LLM_MODEL||config.llm.model});if(!provider?.isConfigured)throw new Error('Analysis provider unavailable');
-  // A provider-wide outage is not something more retries on the same endpoint
-  // can fix — opencode-go once answered every call with a canned Chinese refusal
-  // for three hours. When a second provider is configured, the final attempt
-  // runs on it, so one vendor's bad afternoon cannot leave the site frozen.
-  const fallback=(()=>{
-    const name=String(process.env.RADAR_LLM_FALLBACK_PROVIDER||'minimax').toLowerCase();
-    if(name===provider.name)return null;
-    const p=createLLMProvider({provider:name,apiKey:process.env.LLM_API_KEY,model:process.env.RADAR_LLM_FALLBACK_MODEL||'MiniMax-M3'});
-    return p?.isConfigured?p:null;
-  })();
+  const fallback=selectFallbackProvider(provider);
   const sorted=[...events].sort((a,b)=>Date.parse(b.publishedAt||b.fetchedAt)-Date.parse(a.publishedAt||a.fetchedAt));
   // Candidate pool (all eligible changed events across boards; 70 cap to prevent
   // model JSON truncation), filled board by board so no board is starved,

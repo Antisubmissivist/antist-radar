@@ -2,6 +2,7 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { adjustScore, sourceScoreDelta } from '../lib/source-tier.mjs';
 import { distinctiveTokens, dropDownstreamXDuplicates } from '../apis/sources/radar-feeds.mjs';
+import { orQuery } from '../apis/sources/gdelt.mjs';
 
 // The source preference lives in the score, not in the sort: a reader who sees
 // 58 above 82 is looking at a bug, not a policy. These pin the two halves — the
@@ -35,4 +36,14 @@ test('a generic shared word does not merge two different stories', () => {
   ];
   assert.equal(dropDownstreamXDuplicates(items).length, 2, 'no distinctive token, no drop');
   assert.equal(distinctiveTokens('A new model launch from a lab').size, 0);
+});
+
+// GDELT answers a bare OR query with HTTP 200 and the text "Queries containing
+// OR'd terms must be surrounded by ()" — so the source looked degraded for
+// months while every request "succeeded". The guard has to survive edits.
+test('GDELT OR queries are parenthesised', () => {
+  assert.equal(orQuery('conflict OR sanctions'), '(conflict OR sanctions)');
+  assert.equal(orQuery('(conflict OR sanctions)'), '(conflict OR sanctions)', 'already wrapped, untouched');
+  assert.equal(orQuery('earthquake'), 'earthquake', 'a plain query is left alone');
+  assert.equal(orQuery('"Nvidia" AND earnings'), '"Nvidia" AND earnings', 'AND is fine unparenthesised');
 });

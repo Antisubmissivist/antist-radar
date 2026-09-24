@@ -16,7 +16,7 @@ const NOISE=/^(\s*(subscribe|sign ?in|sign ?up|log ?in|read more|share|advertise
 export const usableEvidence=(evidence,title)=>{const t=String(evidence||'').replace(/\s+/g,' ').trim();if(!t||/\[object object\]/i.test(t))return false;if(t===String(title||'').replace(/\s+/g,' ').trim())return false;if(t.length<40)return false;if(NOISE.test(t))return false;return true;};
 const iso=v=>Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
 export async function request(url, type='text', headers={}) {
-  const r=await fetch(url,{headers:{'User-Agent':'AntistRadar/1.0 (+https://radar.antist.ai)',...headers},signal:AbortSignal.timeout(18000)});
+  const r=await fetch(url,{headers:{'User-Agent':'AntistRadar/1.0 (+https://radar.antist.ai)',...headers},signal:AbortSignal.timeout(24000)});
   if(!r.ok) throw new Error(`HTTP ${r.status}`);
   const reader=r.body.getReader();const chunks=[];let size=0;
   for(;;){const {done,value}=await reader.read();if(done)break;size+=value.byteLength;if(size>64_000_000){await reader.cancel();throw new Error('Response too large');}chunks.push(value);}
@@ -169,12 +169,14 @@ async function x2rss() {
   }
   return {items,scanned};
 }
+// Yahoo's per-ticker headline feed (feeds.finance.yahoo.com/rss/2.0/headline)
+// started answering HTTP 500 for every symbol, which is why the source showed
+// as unavailable. Yahoo's own market RSS still works, so read that instead.
 async function stocks() {
-  const tickers=['^GSPC','NVDA','7203.T'];
   const items=[];let scanned=0;
-  for(const s of tickers){
-    const r=await feed('Yahoo Finance','stocks',`https://feeds.finance.yahoo.com/rss/2.0/headline?s=${encodeURIComponent(s)}&region=US&lang=en-US`);
-    scanned+=r.scanned;items.push(...r.items.slice(0,3));
+  for(const url of ['https://finance.yahoo.com/rss/topstories','https://finance.yahoo.com/news/rssindex']){
+    const r=await feed('Yahoo Finance','stocks',url,undefined,6);
+    scanned+=r.scanned;items.push(...r.items);
   }
   return {items,scanned};
 }

@@ -7,6 +7,16 @@ import { safeFetch } from '../utils/fetch.mjs';
 
 const BASE = 'https://api.gdeltproject.org/api/v2';
 
+// GDELT rejects a bare OR query with a 200 whose body is the text "Queries
+// containing OR'd terms must be surrounded by ()". The request "succeeds", so
+// the health check only sees a payload with no articles and marks the source
+// degraded — which is what it did for months. Parenthesise OR queries here so
+// no caller can forget.
+export const orQuery = (q) => {
+  const s = String(q || '').trim();
+  return (/\bOR\b/i.test(s) && !s.startsWith('(')) ? `(${s})` : s;
+};
+
 // Search recent global events/articles by keyword
 export async function searchEvents(query = '', opts = {}) {
   const {
@@ -20,7 +30,7 @@ export async function searchEvents(query = '', opts = {}) {
   } = opts;
 
   // If no query, use broad geopolitical terms
-  const q = query || 'conflict OR crisis OR military OR sanctions OR war OR economy';
+  const q = orQuery(query || 'conflict OR crisis OR military OR sanctions OR war OR economy');
   const params = new URLSearchParams({
     query: q,
     mode,
@@ -36,7 +46,7 @@ export async function searchEvents(query = '', opts = {}) {
 // Get tone/sentiment timeline for a topic
 export async function toneTrend(query, timespan = '7d') {
   const params = new URLSearchParams({
-    query,
+    query: orQuery(query),
     mode: 'TimelineTone',
     timespan,
     format: 'json',
@@ -47,7 +57,7 @@ export async function toneTrend(query, timespan = '7d') {
 // Get volume timeline for a topic (how much coverage)
 export async function volumeTrend(query, timespan = '7d') {
   const params = new URLSearchParams({
-    query,
+    query: orQuery(query),
     mode: 'TimelineVol',
     timespan,
     format: 'json',
@@ -64,7 +74,7 @@ export async function geoEvents(query = '', opts = {}) {
     maxPoints = 500,
   } = opts;
 
-  const q = query || 'conflict OR military OR protest OR explosion';
+  const q = orQuery(query || 'conflict OR military OR protest OR explosion');
   const params = new URLSearchParams({
     query: q,
     mode,

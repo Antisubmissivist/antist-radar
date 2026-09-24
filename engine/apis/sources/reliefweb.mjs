@@ -20,6 +20,9 @@ async function viaRss() {
     title: strip(i.title),
     url: typeof i.link === 'string' ? i.link : i.link?.['#text'],
     date: i.pubDate ? new Date(i.pubDate).toISOString() : null,
+    // The feed's own summary. Without it the item is a bare headline, and a bare
+    // headline is dropped before it reaches the pool (usableEvidence).
+    description: strip(i.description || i.encoded || i['content:encoded'] || '').slice(0, 600),
   }));
 }
 
@@ -31,6 +34,7 @@ async function viaHdx() {
     title: p.title,
     url: `https://data.humdata.org/dataset/${p.name}`,
     date: p.metadata_modified || null,
+    description: strip(p.notes || p.title || '').slice(0, 600),
   }));
 }
 

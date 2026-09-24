@@ -28,10 +28,10 @@ for(const a of (s.GDELT?.allArticles||[]).slice(0,5))add('GDELT','geopolitics',a
 // needs OAuth credentials it does not have — it reports no_key — so it stays out
 // until someone registers an app.) Category is a prefill; the model re-reads it.
 const at=v=>Number.isFinite(Date.parse(v))?new Date(v).toISOString():null;
-for(const topic of ['conflict','markets','health'])for(const p of (s.Bluesky?.topics?.[topic]||[]).slice(0,4))if(p.url)add('Bluesky','geopolitics',p.text,p.url,p.text,at(p.date));
-for(const o of (s.WHO?.diseaseOutbreakNews||[]).slice(0,5))if(o.url)add('WHO','geopolitics',o.title,o.url,o.summary||o.title,at(o.date));
-for(const r of (s.ReliefWeb?.latestReports||[]).slice(0,5))if(r.url)add('ReliefWeb','geopolitics',r.title,r.url,r.title,at(r.date));
-for(const a of (s.OFAC?.recent||[]).slice(0,5))if(a.url)add('OFAC','geopolitics',a.title,a.url,a.title,at(a.date));
+for(const topic of ['conflict','markets','health'])for(const p of (s.Bluesky?.topics?.[topic]||[]).slice(0,4))if(p.url)add('Bluesky','geopolitics',p.text,p.url,`Bluesky post by @${p.author} · ${p.likes} likes\n${p.text}`,at(p.date));
+for(const o of (s.WHO?.diseaseOutbreakNews||[]).slice(0,5))if(o.url)add('WHO','geopolitics',o.title,o.url,o.summary||`WHO Disease Outbreak News${o.donId?' ('+o.donId+')':''}: ${o.title}`,at(o.date));
+for(const r of (s.ReliefWeb?.latestReports||[]).slice(0,5))if(r.url)add('ReliefWeb','geopolitics',r.title,r.url,r.description||`ReliefWeb (UN OCHA) update: ${r.title}`,at(r.date));
+for(const a of (s.OFAC?.recent||[]).slice(0,5))if(a.url)add('OFAC','geopolitics',a.title,a.url,`OFAC recent action${a.date?' dated '+a.date:''}: ${a.title}`,at(a.date));
 for(const a of (s['CISA-KEV']?.vulnerabilities||[]).slice(0,5))add('CISA-KEV','tech',`${a.cveID}: ${a.vulnerabilityName}`,`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,`${a.vendorProject} ${a.product}. ${a.shortDescription||''}. ${a.requiredAction||''}. Federal remediation due date is not a deadline applying to every reader.`,null,a.cveID);
 const all=[...new Map(raw.map(x=>[x.id,x])).values()].map(x=>({...x,title:scrub(x.title),evidence:scrub(x.evidence)}));
 // Drop items with no usable content (unreadable/missing extraction): only real news stays.

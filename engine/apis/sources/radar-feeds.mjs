@@ -226,6 +226,98 @@ async function xsearch() {
   }).filter(Boolean).slice(0, 8);
   return { items, scanned: tweets.length };
 }
+// Reddit — via the Arctic Shift archive (free, no key, no account).
+//
+// Reddit's own doors are shut: self-service API access closed in Nov 2025
+// (approval-only, and only where Devvit cannot do the job), and since May 2026
+// the public .json endpoints answer 403. Arctic Shift keeps a continuously
+// updated mirror and answers plain keyless HTTP, so it is the one free pipe to
+// Reddit that still works. Its .rss feeds answer too but throttle to 429 after a
+// couple of calls; the archive took 60+ requests in a row without complaint.
+//
+// Fresh posts carry a placeholder score of 1 for their first ~36 hours (the
+// archive backfills engagement later), so this cannot rank by upvotes. Ranking
+// by score would mean reading posts two days old, and a two-day-old story is
+// already on the site from a fresher feed. So it takes the newest posts and
+// lets the persona scoring decide what matters.
+const REDDIT_WINDOW_H = 36;
+const REDDIT_PER_SUB = 2;
+const REDDIT_SUBS = [
+  ['LocalLLaMA', 'ai'], ['artificial', 'ai'],
+  ['technology', 'tech'],
+  ['CryptoCurrency', 'crypto'],
+  ['stocks', 'stocks'],
+  ['worldnews', 'geopolitics'],
+  ['japanlife', 'japan-life'], ['movingtojapan', 'japan-residence'],
+  ['Christianity', 'christianity'],
+];
+const REDDIT_HOST = /^https?:\/\/(?:www\.|old\.|np\.)?reddit\.com\//i;
+// Reddit media hosts, not articles: an image post is a meme, not a story.
+const REDDIT_MEDIA = /^https?:\/\/(?:i\.redd\.it|v\.redd\.it|preview\.redd\.it|external-preview\.redd\.it|i\.imgur\.com|imgur\.com)\//i;
+// Hosts a link post points at that are never a story: surveys, spam microsites,
+// link-in-bio pages, Reddit's own outbound redirect.
+const REDDIT_JUNK_HOST = /^https?:\/\/(?:docs\.google\.com\/forms|sites\.google\.com|forms\.gle|(?:www\.)?surveymonkey\.com|typeform\.com|(?:www\.)?linktr\.ee|out\.reddit\.com)\//i;
+// A link post's `url` is the article it points at; a self-post's is its own
+// permalink, and a crosspost's is a relative path (`/r/other/...`). Only the
+// first is an external article.
+function redditExternal(p) {
+  const u = String(p.url || '');
+  if (!/^https?:\/\//i.test(u)) return false;
+  return !REDDIT_HOST.test(u) && !REDDIT_MEDIA.test(u) && !REDDIT_JUNK_HOST.test(u);
+}
+// What is worth taking: a link post (the article is the content, and the link
+// tells us the community found it) or a self-post with a real body. Everything
+// else is memes, one-line questions and personal diary posts — the newest posts
+// in a subreddit are mostly that, and without upvote counts to rank by (see
+// above) this gate is the only quality signal available.
+function redditQuality(p) {
+  const body = String(p.selftext || '').trim();
+  if (redditExternal(p)) return true;
+  return body.length >= 200 && !/^\[(removed|deleted)\]$/i.test(body);
+}
+// A Reddit title is often the whole post, so the evidence has to carry what the
+// title cannot: which subreddit, how the community received it, and — for a link
+// post — where it points. Without a body the item would be a bare headline, and
+// a bare headline is dropped before it reaches the pool (usableEvidence).
+function redditEvidence(sub, p) {
+  let body = plain(p.selftext || '').trim();
+  if (/^\[(removed|deleted)\]$/i.test(body)) body = ''; // the body is gone; do not print the marker
+  const meta = `r/${sub} · u/${p.author || 'unknown'} · ${p.score ?? 0} points · ${p.num_comments ?? 0} comments${p.link_flair_text ? ' · ' + p.link_flair_text : ''}`;
+  const linked = redditExternal(p) ? `Linked: ${p.url}` : '';
+  return [meta, linked, body].filter(Boolean).join('\n').slice(0, 1900);
+}
+export async function arcticShift() {
+  const after = Math.floor(Date.now() / 1000) - REDDIT_WINDOW_H * 3600;
+  const results = await Promise.all(REDDIT_SUBS.map(async ([sub, category]) => {
+    try {
+      const j = await request(`https://arctic-shift.photon-reddit.com/api/posts/search?subreddit=${sub}&limit=100&sort=desc&after=${after}`, 'json');
+      return { sub, category, rows: Array.isArray(j?.data) ? j.data : [] };
+    } catch (e) {
+      // A free archive rate-limiting us is not the sweep's problem: skip this
+      // subreddit and try again next hour rather than failing the whole source.
+      return { sub, category, rows: [], error: e.message };
+    }
+  }));
+  // Every subreddit failing at once is an outage, not a quiet day — throw so the
+  // health list paints it red instead of a green "ok · 0".
+  const failures = results.filter(r => r.error);
+  if (failures.length === results.length) throw new Error(`Arctic Shift unavailable: ${failures[0].error}`);
+  const items = []; let scanned = 0;
+  for (const { sub, category, rows } of results) {
+    scanned += rows.length;
+    const keep = rows.filter(p => p && p.title && p.permalink && !p.over_18 && !p.stickied && redditQuality(p)).slice(0, REDDIT_PER_SUB);
+    for (const p of keep) {
+      items.push(event('Reddit', category, {
+        sourceId: `reddit:${p.id || p.permalink}`,
+        title: plain(p.title).slice(0, 220),
+        url: `https://www.reddit.com${p.permalink}`,
+        publishedAt: Number.isFinite(p.created_utc) ? new Date(p.created_utc * 1000).toISOString() : null,
+        evidence: redditEvidence(sub, p),
+      }));
+    }
+  }
+  return { items, scanned };
+}
 async function stocks() {
   const items=[];let scanned=0;
   for(const url of ['https://finance.yahoo.com/rss/topstories','https://finance.yahoo.com/news/rssindex']){
@@ -257,6 +349,8 @@ export const FEEDS=[
   // tweets into prose without links, so it is weighted down rather than removed.
   {name:'AINews',url:'https://www.latent.space/',collect:ainews},
   ...(process.env.XTWITTER_API_KEY?[{name:'X',url:'https://rapidapi.com/xtwitter/api/x-twitter2',collect:xsearch}]:[]),
+  // Reddit through the Arctic Shift mirror (no key, no account — see arcticShift).
+  {name:'Reddit',url:'https://www.reddit.com/',collect:arcticShift},
   {name:'Techmeme',url:'https://www.techmeme.com/',collect:()=>feed('Techmeme','tech','https://www.techmeme.com/feed.xml')},
   {name:'The Verge',url:'https://www.theverge.com/rss/index.xml',collect:()=>feed('The Verge','tech','https://www.theverge.com/rss/index.xml')},
   {name:'Ars Technica',url:'https://feeds.arstechnica.com/arstechnica/index',collect:()=>feed('Ars Technica','tech','https://feeds.arstechnica.com/arstechnica/index')},

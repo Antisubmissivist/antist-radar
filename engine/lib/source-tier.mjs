@@ -53,6 +53,10 @@ const BY_NAME = new Map(Object.entries({
   CoinDesk: 'media',
   MarketWatch: 'media',
   'Yahoo Finance': 'media',
+  // Reddit is a community layer: link posts point downstream at an article, and
+  // the discussion is first-hand but not an institutional fact. Media, not X —
+  // it is not where the news breaks, it is where it gets argued about.
+  Reddit: 'media',
   'BBC World': 'media',
   'Al Jazeera': 'media',
   'DW World': 'media',

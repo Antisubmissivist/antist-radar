@@ -184,6 +184,36 @@ async function x2rss() {
 // Yahoo's per-ticker headline feed (feeds.finance.yahoo.com/rss/2.0/headline)
 // started answering HTTP 500 for every symbol, which is why the source showed
 // as unavailable. Yahoo's own market RSS still works, so read that instead.
+// X search — the firehose, with a link to the post.
+//
+// TwitterAPIs (api.twitterapis.com) runs the full X advanced-search operator set
+// (`min_faves:` is what makes it "the tweets people engaged with") and returns
+// each tweet's id and author, so the card links to the post itself. Pay-per-call:
+// $0.0008 for ~20 tweets, $0.50 in free credits at signup (~625 calls).
+//
+// That quota is why this polls SIX times a day, not hourly: the sweep runs every
+// hour, so the other eighteen are skipped. One query per poll is ~180 calls a
+// month — inside the free credits for three months, and a $10 top-up after that
+// lasts years. Raising the poll count is a one-line change here.
+const X_POLL_HOURS_UTC = [0, 4, 8, 12, 16, 20]; // 09/13/17/21/01/05 JST
+const xDue = () => X_POLL_HOURS_UTC.includes(new Date().getUTCHours());
+async function xsearch() {
+  const key = process.env.TWITTERAPIS_KEY;
+  if (!key) throw new Error('TWITTERAPIS_KEY unset');
+  if (!xDue()) return { items: [], scanned: 0, status: 'quiet' };
+  const q = '(AI OR OpenAI OR Anthropic OR Nvidia OR Taiwan OR Iran OR Ukraine OR Bitcoin OR "Federal Reserve") min_faves:1000 -filter:replies';
+  const params = new URLSearchParams({ query: q, product: 'Top', compact: '1' });
+  const j = await request(`https://api.twitterapis.com/twitter/tweet/advanced_search?${params}`, 'json', { Authorization: `Bearer ${key}` });
+  const tweets = Array.isArray(j?.tweets) ? j.tweets : [];
+  const items = tweets.filter(t => t?.id && t?.author?.username).slice(0, 8).map(t => event('X', 'ai', {
+    sourceId: `x:${t.id}`,
+    title: String(t.text || '').replace(/\s+/g, ' ').slice(0, 220),
+    url: `https://x.com/${t.author.username}/status/${t.id}`,
+    publishedAt: iso(t.created_at),
+    evidence: `${t.author.name || t.author.username} (@${t.author.username}) · ${t.favorite_count || 0} likes · ${t.retweet_count || 0} retweets\n${String(t.text || '').slice(0, 900)}`,
+  }));
+  return { items, scanned: tweets.length };
+}
 async function stocks() {
   const items=[];let scanned=0;
   for(const url of ['https://finance.yahoo.com/rss/topstories','https://finance.yahoo.com/news/rssindex']){
@@ -214,6 +244,7 @@ export const FEEDS=[
   // engagement-ranked search (needs a RapidAPI key); ClawFeed rewrites the same
   // tweets into prose without links, so it is weighted down rather than removed.
   {name:'AINews',url:'https://www.latent.space/',collect:ainews},
+  ...(process.env.TWITTERAPIS_KEY?[{name:'X',url:'https://api.twitterapis.com/',collect:xsearch}]:[]),
   ...(process.env.X2RSS_API_KEY?[{name:'X2RSS',url:'https://x2rss.p.rapidapi.com/',collect:x2rss}]:[]),
   {name:'Techmeme',url:'https://www.techmeme.com/',collect:()=>feed('Techmeme','tech','https://www.techmeme.com/feed.xml')},
   {name:'The Verge',url:'https://www.theverge.com/rss/index.xml',collect:()=>feed('The Verge','tech','https://www.theverge.com/rss/index.xml')},

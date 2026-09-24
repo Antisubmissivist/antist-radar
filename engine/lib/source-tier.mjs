@@ -24,6 +24,7 @@ const BY_NAME = new Map(Object.entries({
   ClawFeed: 'x',
   AINews: 'x',
   X2RSS: 'x',
+  X: 'x',
 
   // --- primary: the institution publishing its own decision ------------------
   Japan: 'primary',              // JMA

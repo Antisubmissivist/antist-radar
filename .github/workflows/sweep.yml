@@ -22,6 +22,7 @@ jobs:
       EIA_API_KEY: ${{ secrets.EIA_API_KEY }}
       BLUESKY_HANDLE: ${{ secrets.BLUESKY_HANDLE }}
       BLUESKY_APP_PASSWORD: ${{ secrets.BLUESKY_APP_PASSWORD }}
+      TWITTERAPIS_KEY: ${{ secrets.TWITTERAPIS_KEY }}
       RADAR_INGEST_TOKEN: ${{ secrets.RADAR_INGEST_TOKEN }}
       GH_READ_TOKEN: ${{ github.token }}
       SOURCE_TIMEOUT_MS: '45000'

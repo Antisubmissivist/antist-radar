@@ -82,7 +82,7 @@ export function buildMarkdown(s, lang = 'zh', boards) {
   for (const b of list) {
     const items = selectBoard(s.events, b, PER);
     out.push(`<details><summary>${EMOJI[b]} ${L[b]}（${items.length}）</summary>`, '');
-    out.push('| 标题 | 内容 | 链接 |', '| --- | --- | --- |');
+    out.push('| ' + t.colTitle + ' | ' + t.colBody + ' | ' + t.colLink + ' |', '| --- | --- | --- |');
     if (items.length) for (const e of items) { const dl = e.deadlineAt ? ('⏰ ' + String(e.deadlineAt).slice(0, 10) + ' · ') : ''; out.push(`| ${cut(e.title?.[lang], 200)} | ${cut(dl + (e.summary?.[lang] || e.action?.[lang]), 200)} | [链接](${e.url}) |`); }
     else out.push(`| ${t.none} | — | — |`);
     out.push('', '</details>', '');

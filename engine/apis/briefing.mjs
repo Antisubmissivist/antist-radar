@@ -31,7 +31,9 @@ import { briefing as comtrade } from './sources/comtrade.mjs';
 // === Tier 3: Weather, Environment, Technology, Social ===
 import { briefing as noaa } from './sources/noaa.mjs';
 import { briefing as bluesky } from './sources/bluesky.mjs';
-import { briefing as reddit } from './sources/reddit.mjs';
+// Reddit import removed 2026-09-24 — Reddit closed self-service API access in
+// Nov 2025 (approval-only, "only where Devvit fails") and its public JSON
+// endpoint answers 403, so there is no path that works without a third party.
 import { briefing as telegram } from './sources/telegram.mjs';
 
 // === Tier 4: Space & Satellites ===
@@ -99,7 +101,6 @@ export async function fullBriefing() {
     // Tier 3: Weather, Environment, Technology, Social
     runSource('NOAA', noaa),
     runSource('Bluesky', bluesky),
-    runSource('Reddit', reddit),
     runSource('Telegram', telegram),
 
     // Tier 4: Space & Satellites

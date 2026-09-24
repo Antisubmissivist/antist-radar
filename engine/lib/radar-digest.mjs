@@ -2,8 +2,6 @@
 // Worker and from standalone scripts (GitHub Actions). Content comes entirely
 // from the published snapshot — no model call.
 
-import { sourceWeight } from './source-tier.mjs';
-
 export const BOARDS = ['ai', 'tech', 'japan-residence', 'japan-life', 'geopolitics', 'crypto', 'stocks', 'christianity'];
 
 const EMOJI = { ai: '🤖', tech: '📱', 'japan-residence': '🛂', 'japan-life': '🏠', geopolitics: '🌍', crypto: '₿', stocks: '📈', christianity: '✝️' };
@@ -36,18 +34,18 @@ const pick = (lang) => (LABEL[lang] || LABEL.zh);
 // in the 50s the gate was always empty and the board silently fell back to
 // newest-first — which is exactly what "top of the board" must never mean.
 // Unscored rows only fill leftover slots, newest first.
-export function rankScore(score, dateStr, now = Date.now(), weight = 1) {
+export function rankScore(score, dateStr, now = Date.now()) {
   const s = Number(score) || 0;
   if (s <= 0) return -1;
   const ts = Date.parse(dateStr || '') || now;
   const ageHours = Math.max(0, (now - ts) / 3600000);
-  return (s * weight) / Math.pow(ageHours / 48 + 1, 1.2);
+  return s / Math.pow(ageHours / 48 + 1, 1.2);
 }
 export function selectBoard(events, board, n = 3, now = Date.now()) {
   const cand = (events || []).filter(e => e && e.category === board);
   const byRecency = (a, b) => Date.parse(b.publishedAt || b.fetchedAt || 0) - Date.parse(a.publishedAt || a.fetchedAt || 0);
   const scored = cand.filter(e => Number(e.score) > 0)
-    .map(e => ({ e, r: rankScore(e.score, e.publishedAt || e.fetchedAt, now, sourceWeight(e.source)) }))
+    .map(e => ({ e, r: rankScore(e.score, e.publishedAt || e.fetchedAt, now) }))
     .filter(x => x.r > 0).sort((a, b) => (b.r - a.r) || byRecency(a.e, b.e)).map(x => x.e);
   const unscored = cand.filter(e => !(Number(e.score) > 0)).sort(byRecency);
   // One card per story. The same event reported by Techmeme and by Decrypt is

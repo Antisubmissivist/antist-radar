@@ -2,7 +2,7 @@ import config from '../crucix.config.mjs';
 import {createLLMProvider} from './llm/index.mjs';
 import {writeFile} from 'node:fs/promises';
 import {selectionSystemPrompt,PERSONA_EN} from './persona.mjs';
-import {sourceTier,TIER_RANK,sourceWeight} from './source-tier.mjs';
+import {sourceTier,TIER_RANK,adjustScore} from './source-tier.mjs';
 import {judgeEdition} from './radar-judge.mjs';
 import {CATEGORIES} from './radar-contract.mjs';
 
@@ -45,7 +45,9 @@ async function selectByPersona(provider,pool){
     for(const row of items){
       const id=String((row&&row.id)||'');const e=byId.get(id);
       if(!e||scored.includes(e))continue;
-      e.score=Math.max(0,Math.min(100,Math.round(Number(row&&row.score)||0)));
+      // The source adjustment is folded into the score here, once, so the site's
+      // "ordered by relevance" stays literally true (see source-tier.mjs).
+      e.score=adjustScore(row&&row.score,e.source);
       // The board comes from the model reading the item; the source-level
       // category is only a prefill and is routinely wrong (a global job ad
       // filed as life-in-Japan, a version bump filed as AI). The model is
@@ -70,7 +72,7 @@ async function selectByPersona(provider,pool){
     const TIER_BONUS={x:15,primary:8,media:0,data:0};
     for(const e of scored){
       e.tier=sourceTier(e.source);
-      e.rank=Math.min(100,((e.score||0)+(TIER_BONUS[e.tier]||0))*sourceWeight(e.source));
+      e.rank=Math.min(100,(e.score||0)+(TIER_BONUS[e.tier]||0));
     }
     scored.sort((x,y)=>(y.rank-x.rank)||(TIER_RANK[x.tier]-TIER_RANK[y.tier]));
     const per=new Map();const capped=[];

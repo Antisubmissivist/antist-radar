@@ -55,14 +55,6 @@ test('only the requested board is considered', () => {
   assert.deepEqual(selectBoard([a, b], 'ai', 3, now).map(e => e.id), ['a']);
 });
 
-test('a demoted source loses to a comparable one', () => {
-  // ClawFeed rewrites the same tweets without linking to them; AINews links to
-  // the original post. When both carry the day, the clickable one leads.
-  const claw = { id: 'claw', category: 'ai', source: 'ClawFeed', score: 70, publishedAt: iso(0.1), fetchedAt: iso(0.1), threadId: 'T1' };
-  const ain = { id: 'ain', category: 'ai', source: 'AINews', score: 60, publishedAt: iso(0.2), fetchedAt: iso(0.2), threadId: 'T2' };
-  assert.deepEqual(selectBoard([claw, ain], 'ai', 1, now).map(e => e.id), ['ain']);
-});
-
 test('every board the digest renders is a board the contract accepts', () => {
   for (const b of BOARDS) assert.ok(CATEGORIES.includes(b), `${b} is not a contract category`);
   assert.ok(BOARDS.includes('christianity'), 'the Christianity board must be wired end to end');

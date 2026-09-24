@@ -233,6 +233,34 @@ export const FEEDS=[
   {name:'Crux',url:'https://cruxnow.com/',collect:()=>feed('Crux','christianity','https://cruxnow.com/feed',undefined,5)},
   {name:'キリスト新聞',url:'https://christianpress.jp/',collect:()=>feed('キリスト新聞','christianity','https://christianpress.jp/feed/',undefined,5)},
 ];
+// The X pipes overlap by design: AINews and ClawFeed both summarise the same
+// tweets, and ClawFeed's copy links to its own homepage instead of the post.
+// When both carry the story, the one a reader can click through to wins and the
+// other is dropped, so the pool is not spent on two copies of one story.
+//
+// Matching is deliberately narrow: only CAPITALISED Latin words count (Firecrawl,
+// Opus, Alexandria), because a proper noun is the one thing the same story keeps
+// across two languages. Lowercase generics ("agent", "model", "data") are
+// stripped — matching on those merged unrelated stories in testing.
+const X_TOKEN_STOP=new Set(['the','this','that','these','those','with','from','into','over','after','before','when','what','which','while','their','there','then','than','also','more','most','some','such','launch','launches','release','releases','report','reports','says','said','using','gets','make','makes','new','via','week','today','first','next','best','top','list','price','speed','cost','model','models','openai','anthropic','google','meta','microsoft','apple','nvidia','claude','gpt','chatgpt','gemini','llm','api','ai','agent','agents','data','million','billion','series','round','raises','raised','announces','announced']);
+export function distinctiveTokens(title){
+  const out=new Set();
+  for(const m of String(title||'').matchAll(/[A-Z][A-Za-z0-9.+-]{2,}/g)){
+    const t=m[0].toLowerCase();
+    if(!X_TOKEN_STOP.has(t))out.add(t);
+  }
+  return out;
+}
+export function dropDownstreamXDuplicates(items,winner='AINews',loser='ClawFeed'){
+  const covered=new Set();
+  for(const it of items) if(it&&it.source===winner) for(const t of distinctiveTokens(it.title)) covered.add(t);
+  if(!covered.size) return items;
+  return items.filter(it=>{
+    if(!it||it.source!==loser) return true;
+    for(const t of distinctiveTokens(it.title)) if(covered.has(t)) return false;
+    return true;
+  });
+}
 export async function collectFeeds() {
   return Promise.all(FEEDS.map(async f=>{
     const fetchedAt=new Date().toISOString();

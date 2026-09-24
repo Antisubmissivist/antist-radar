@@ -2,7 +2,7 @@ import '../apis/utils/env.mjs';
 import {mkdir,readFile,writeFile,rename} from 'node:fs/promises';
 import {createHash} from 'node:crypto';
 import {fullBriefing} from '../apis/briefing.mjs';
-import {collectFeeds,usableEvidence,scrub} from '../apis/sources/radar-feeds.mjs';
+import {collectFeeds,usableEvidence,scrub,dropDownstreamXDuplicates} from '../apis/sources/radar-feeds.mjs';
 import {changes,eventId,eligibility} from '../lib/decision-events.mjs';
 import {analyseRadar} from '../lib/radar-analysis.mjs';
 import {publicSnapshot} from '../lib/radar-contract.mjs';
@@ -26,8 +26,12 @@ for(const a of (s.GDELT?.allArticles||[]).slice(0,5))add('GDELT','geopolitics',a
 for(const a of (s['CISA-KEV']?.vulnerabilities||[]).slice(0,5))add('CISA-KEV','tech',`${a.cveID}: ${a.vulnerabilityName}`,`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,`${a.vendorProject} ${a.product}. ${a.shortDescription||''}. ${a.requiredAction||''}. Federal remediation due date is not a deadline applying to every reader.`,null,a.cveID);
 const all=[...new Map(raw.map(x=>[x.id,x])).values()].map(x=>({...x,title:scrub(x.title),evidence:scrub(x.evidence)}));
 // Drop items with no usable content (unreadable/missing extraction): only real news stays.
-const unique=all.filter(x=>usableEvidence(x.evidence,x.title));
-const droppedEvidence=all.length-unique.length;
+const withEvidence=all.filter(x=>usableEvidence(x.evidence,x.title));
+// Then drop a downstream copy of a story a clickable X source already has.
+const unique=dropDownstreamXDuplicates(withEvidence);
+const droppedEvidence=all.length-withEvidence.length;
+const droppedDuplicate=withEvidence.length-unique.length;
+if(droppedDuplicate)console.error(JSON.stringify({event:'dropped-downstream-duplicate',count:droppedDuplicate}));
 async function fetchRemoteState(endpoint,token){
   if(!token)return null;
   try{

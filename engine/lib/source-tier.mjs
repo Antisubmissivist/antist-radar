@@ -66,17 +66,24 @@ const BY_NAME = new Map(Object.entries({
   'キリスト新聞': 'media',
 }));
 
-// How much a source's relevance score counts when ranking. Every pipe to X
-// carries overlapping stories, and one of them is a downstream digest of the
-// others rather than a pipe to the post itself: ClawFeed rewrites the same
+// How a source's own relevance score is adjusted before it is stored. Every pipe
+// to X carries overlapping stories, and one of them is a downstream digest of
+// the others rather than a pipe to the post itself: ClawFeed rewrites the same
 // tweets into Chinese prose and links to its own homepage, while AINews and
-// X2RSS link to the original post. The story should lead with the source a
-// reader can click through to, so ClawFeed is weighted below them — kept for
-// the stories only it carries, never leading with them.
-export const SOURCE_WEIGHT = { ClawFeed: 0.7 };
-export function sourceWeight(name) {
-  const w = SOURCE_WEIGHT[String(name || '')];
-  return typeof w === 'number' ? w : 1;
+// X2RSS link to the original post.
+//
+// The adjustment lives IN the score, not in the sort. A ranking multiplier is a
+// hidden second key: it let a 58 outrank an 82, which is not something a reader
+// can see or check. Folding the same preference into the score keeps "ordered by
+// relevance" literally true — the number on the card explains the order.
+// Deltas are score points, applied once at scoring time, clamped to 0-100.
+export const SOURCE_SCORE_DELTA = { ClawFeed: -20, AINews: 8, X2RSS: 8 };
+export function sourceScoreDelta(name) {
+  const d = SOURCE_SCORE_DELTA[String(name || '')];
+  return typeof d === 'number' ? d : 0;
+}
+export function adjustScore(score, name) {
+  return Math.max(0, Math.min(100, Math.round(Number(score) || 0) + sourceScoreDelta(name)));
 }
 
 /**

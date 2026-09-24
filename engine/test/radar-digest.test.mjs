@@ -55,6 +55,15 @@ test('only the requested board is considered', () => {
   assert.deepEqual(selectBoard([a, b], 'ai', 3, now).map(e => e.id), ['a']);
 });
 
+// The half-life is a product decision, not an implementation detail: the owner
+// asked for exactly eight days. Pin it so a "cleanup" of the formula cannot
+// silently change how fast news fades.
+test('the decay half-life is exactly eight days', () => {
+  assert.equal(currentScore(80, iso(0), now), 80);
+  assert.equal(currentScore(80, iso(8), now), 40, '8 days later it is exactly half');
+  assert.equal(currentScore(80, iso(16), now), 20, 'and half again 8 days after that');
+});
+
 test('every board the digest renders is a board the contract accepts', () => {
   for (const b of BOARDS) assert.ok(CATEGORIES.includes(b), `${b} is not a contract category`);
   assert.ok(BOARDS.includes('christianity'), 'the Christianity board must be wired end to end');

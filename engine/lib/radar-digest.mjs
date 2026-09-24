@@ -34,12 +34,18 @@ const pick = (lang) => (LABEL[lang] || LABEL.zh);
 // in the 50s the gate was always empty and the board silently fell back to
 // newest-first — which is exactly what "top of the board" must never mean.
 // Unscored rows only fill leftover slots, newest first.
+// Gravity time-decay, stated as a half-life so it reads the way it behaves: a
+// card keeps exactly half its weight every DECAY_HALF_LIFE_HOURS (8 days).
+// Slowed 4x on 2026-09-24 — the old 48-hour curve buried important news too
+// fast. One constant, used by rankScore() and by the SQL that orders the
+// archive, so the two can never drift.
+export const DECAY_HALF_LIFE_HOURS = 192;
 export function rankScore(score, dateStr, now = Date.now()) {
   const s = Number(score) || 0;
   if (s <= 0) return -1;
   const ts = Date.parse(dateStr || '') || now;
   const ageHours = Math.max(0, (now - ts) / 3600000);
-  return s / Math.pow(ageHours / 48 + 1, 1.2);
+  return s * Math.pow(0.5, ageHours / DECAY_HALF_LIFE_HOURS);
 }
 // The number a card shows IS the sort key. The 48-hour gravity decay is folded
 // into that number instead of being a hidden second key, so "ordered by

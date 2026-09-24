@@ -2,8 +2,8 @@
 // model-free builder in engine/lib/radar-digest.mjs (also used by the Actions
 // script), then sent as a rich message (collapsible blocks + tables).
 
-import { buildMarkdown, selectBoard, currentScore } from '../../engine/lib/radar-digest.mjs';
-export { buildMarkdown, selectBoard, currentScore } from '../../engine/lib/radar-digest.mjs';
+import { buildMarkdown, selectBoard, currentScore, DECAY_HALF_LIFE_HOURS } from '../../engine/lib/radar-digest.mjs';
+export { buildMarkdown, selectBoard, currentScore, DECAY_HALF_LIFE_HOURS } from '../../engine/lib/radar-digest.mjs';
 
 type DeliveryEnv = { DB: D1Database; TELEGRAM_BOT_TOKEN?: string; TELEGRAM_CHAT_ID?: string; TELEGRAM_THREAD_ID?: string };
 type Lang = 'ja' | 'en' | 'zh';

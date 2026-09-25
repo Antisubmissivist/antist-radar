@@ -342,7 +342,8 @@ app.get('/sitemap.xml',async c=>{
   })).join('');
   return c.body(`<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" ${XH}>${urls}</urlset>`,200,{'Content-Type':'application/xml'});
 });
-app.get('/api/public',async c=>{const s=await latestSnapshot(c.env);c.header('Cache-Control','no-store');return s?c.json(s):c.json({status:'pending'},503);});
+// Read-only public snapshot; other sites (kaelblog.com) read it from the browser.
+app.get('/api/public',async c=>{const s=await latestSnapshot(c.env);c.header('Cache-Control','no-store');c.header('Access-Control-Allow-Origin','*');return s?c.json(s):c.json({status:'pending'},503);});
 app.get('/api/ledger',async c=>c.json({forecasts:await ledger(c.env.DB)}));
 app.get('/api/markets',async c=>{const q=c.req.query('symbols');const symbols=q?q.split(',').map(x=>x.trim()).filter(Boolean):undefined;const m=await getMarkets(c.env,symbols);c.header('Cache-Control','no-store');return c.json(m);});
 app.get('/api/symbols',async c=>{const q=(c.req.query('q')||'').trim();if(!q)return c.json({results:[]});c.header('Cache-Control','public, max-age=300');return c.json({results:await searchSymbols(q.slice(0,40))});});

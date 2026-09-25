@@ -96,11 +96,25 @@ describe('OpenCodeProvider canned-refusal handling', () => {
 
 describe('selectFallbackProvider', () => {
   it('falls back to a different model on the same vendor, not to null', () => {
-    const primary = createLLMProvider({ provider: 'opencode', apiKey: 'sk-test', model: 'deepseek-v4.1-flash' });
-    const fb = selectFallbackProvider(primary);
-    assert.ok(fb, 'a fallback must exist even when the vendor matches — only the model has to differ');
-    assert.equal(fb.name, 'opencode');
-    assert.equal(fb.model, 'glm-5.3-flash');
+    // The fallback provider has to count as "configured" without real
+    // credentials. This test read OPENCODE_API_KEY from the ambient environment,
+    // so it passed locally (engine/.env) and in the sweep job (which sets the
+    // secret) but failed in the deploy job, which sets neither — and took every
+    // deploy down with it for a day. Pin the environment the assertion depends on.
+    const savedKey = process.env.OPENCODE_API_KEY;
+    const savedModel = process.env.RADAR_LLM_FALLBACK_MODEL;
+    process.env.OPENCODE_API_KEY = 'sk-test';
+    process.env.RADAR_LLM_FALLBACK_MODEL = 'glm-5.3-flash';
+    try {
+      const primary = createLLMProvider({ provider: 'opencode', apiKey: 'sk-test', model: 'deepseek-v4.1-flash' });
+      const fb = selectFallbackProvider(primary);
+      assert.ok(fb, 'a fallback must exist even when the vendor matches — only the model has to differ');
+      assert.equal(fb.name, 'opencode');
+      assert.equal(fb.model, 'glm-5.3-flash');
+    } finally {
+      if (savedKey === undefined) delete process.env.OPENCODE_API_KEY; else process.env.OPENCODE_API_KEY = savedKey;
+      if (savedModel === undefined) delete process.env.RADAR_LLM_FALLBACK_MODEL; else process.env.RADAR_LLM_FALLBACK_MODEL = savedModel;
+    }
   });
 
   it('refuses a fallback identical to the primary', () => {

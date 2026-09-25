@@ -70,10 +70,25 @@ export function selectBoard(events, board, n = 3, now = Date.now()) {
   // for the next genuinely different story instead of a same-story duplicate.
   const picked = [];
   const seenThreads = new Set();
+  // A second lock, because the thread clusterer is deliberately conservative and
+  // append-only: two reports of one story can land on different threads and slip
+  // past the guard above. That is exactly how the AI board carried the same
+  // Claude Opus 5.5 card twice — two tweets with identical text, two threads.
+  // A title that is literally the same once punctuation and spacing are stripped
+  // is the same story however it was threaded. The length floor stops a one-word
+  // title from swallowing an unrelated card.
+  const titleKey = (e) => {
+    const t = typeof e?.title === 'object' ? (e.title.zh || e.title.en || e.title.ja) : e?.title;
+    return String(t || '').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
+  };
+  const seenTitles = new Set();
   for (const e of [...scored, ...unscored]) {
     const key = e.threadId || e.id;
     if (seenThreads.has(key)) continue;
+    const tk = titleKey(e);
+    if (tk.length >= 12 && seenTitles.has(tk)) continue;
     seenThreads.add(key);
+    if (tk.length >= 12) seenTitles.add(tk);
     picked.push(e);
     if (picked.length >= n) break;
   }

@@ -84,3 +84,32 @@ test('the number on the card is the sort key: a board reads descending', () => {
   }
   assert.ok(scores[0] > 0);
 });
+
+// The thread guard relies on the clusterer, and the clusterer is conservative on
+// purpose (a false merge is a visible lie; a miss is only a missed connection).
+// So it does miss: the AI board shipped the same Claude Opus 5.5 card twice,
+// under two different threads, because two tweets carried the same sentence.
+// The title is the second lock — identical once punctuation is stripped means
+// the same story, whatever thread it was filed under.
+const titled = (id, title, opts) => ({ ...ev(id, opts), title: { zh: title } });
+
+test('the same card title from two different threads collapses to one', () => {
+  const t = 'Claude Opus 5.5 以 88.4% 登顶 SimpleBench，成 Anthropic 迄今最佳视觉模型';
+  const a = titled('a', t, { score: 72, days: 0.1, thread: 'T1' });
+  const b = titled('b', t, { score: 72, days: 0.2, thread: 'T2' }); // same sentence, other tweet
+  const c = titled('c', '另一条毫不相干的新闻标题在此', { score: 60, days: 0.3, thread: 'T3' });
+  const picked = selectBoard([a, b, c], 'ai', 3, now);
+  assert.deepEqual(picked.map(e => e.id), ['a', 'c']);
+});
+
+test('the title lock does not swallow a genuinely different story', () => {
+  const a = titled('a', 'OpenAI 发布新模型并开源权重', { score: 72, thread: 'T1' });
+  const b = titled('b', 'Anthropic 发布安全报告引发争议', { score: 70, thread: 'T2' });
+  assert.deepEqual(selectBoard([a, b], 'ai', 3, now).map(e => e.id), ['a', 'b']);
+});
+
+test('a trivially short title does not lock out another card', () => {
+  const a = titled('a', 'AI', { score: 72, thread: 'T1' });
+  const b = titled('b', 'AI', { score: 70, thread: 'T2' });
+  assert.deepEqual(selectBoard([a, b], 'ai', 3, now).map(e => e.id), ['a', 'b']);
+});

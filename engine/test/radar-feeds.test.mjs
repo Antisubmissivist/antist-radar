@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import {parseFeed,arcticShift,usableEvidence} from '../apis/sources/radar-feeds.mjs';
+import {parseFeed,arcticShift,usableEvidence,ainews} from '../apis/sources/radar-feeds.mjs';
 test('RDF and empty feed are distinguishable from HTML errors',()=>{
   const d=parseFeed('<rdf:RDF xmlns:rdf="urn:rdf" xmlns:dc="urn:dc"><item><title>Notice</title><link>https://example.org/n</link><dc:date>2026-09-11T00:00:00Z</dc:date><description>Details</description></item></rdf:RDF>');
   assert.equal(d.length,1);assert.equal(d[0].publishedAt,'2026-09-11T00:00:00.000Z');
@@ -88,5 +88,24 @@ test('Arctic Shift: one subreddit failing still returns the others',async()=>{
     const r=await arcticShift();
     assert.equal(r.items.length,1);
     assert.equal(r.items[0].category,'geopolitics');
+  }finally{restore();}
+});
+
+// The AI board shipped the same Claude Opus 5.5 card twice because one recap
+// bullet links two accounts ("…leads SimpleBench at 88.4%, @someone adds…") and
+// the collector emitted one event per link, with identical text.
+const AINEWS_FEED = `<?xml version="1.0" encoding="UTF-8"?><rss version="2.0"><channel><title>Latent Space</title><item><title>[AINews] 2026-09-25</title><link>https://www.latent.space/p/ainews-test</link><pubDate>2026-09-25T05:00:00Z</pubDate><description>recap</description></item></channel></rss>`;
+const AINEWS_POST = `<html><body><h1 id="ai-twitter-recap">AI Twitter Recap</h1><ul><li>Claude Opus 5.5 now leads SimpleBench at 88.4%. On vision evals, @skalskip92 ranks it Anthropic's best vision model to date: better than Fable 5 and GPT-6 Sol, worse than GPT-6 Astra, at about 60% lower cost. Reasoning effort climbs from 24% at low to 62% at xhigh. <a href="https://x.com/AiBattle_/status/2103171713672372379">a</a> and <a href="https://x.com/skalskip92/status/2103124154765484505">b</a></li></ul></body></html>`;
+
+test('AINews: two links in one recap bullet are one story, not two cards',async()=>{
+  const restore=withFetch(async url=>String(url).includes('latent.space/feed')
+    ?new Response(AINEWS_FEED,{status:200})
+    :new Response(AINEWS_POST,{status:200}));
+  try{
+    const r=await ainews();
+    assert.equal(r.scanned,2,'both links were seen');
+    assert.equal(r.items.length,1,'but one bullet is one story');
+    assert.ok(usableEvidence(r.items[0].evidence,r.items[0].title));
+    assert.match(r.items[0].url,/x\.com\/(?:AiBattle_|skalskip92)\/status\//);
   }finally{restore();}
 });

@@ -135,10 +135,11 @@ async function clawfeed() {
 // PER TWEET with url = the tweet itself, so a reader clicks through to the post
 // that said it rather than to a digest that mentions it. (The old news.smol.ai
 // feed stopped at 2026-09-10; the recap continues on Latent Space.)
-async function ainews() {
+export async function ainews() {
   const posts=parseFeed(await request('https://www.latent.space/feed')).filter(i=>/\[AINews\]/i.test(i.title));
   const STATUS=/^https?:\/\/(?:x|twitter)\.com\/[^/]+\/status\/\d+/;
   const items=[];let scanned=0;
+  const seenText=new Set();
   for(const post of posts.slice(0,2)){
     const html=await request(post.url,'text',{'User-Agent':'Mozilla/5.0 (compatible; AntistRadar/1.0)'});
     const from=html.search(/id="[^"]*twitter[^"]*recap[^"]*"/i);
@@ -154,6 +155,12 @@ async function ainews() {
       const text=(li.length?li.text():$(a).parent().text()).replace(/\s+/g,' ').trim();
       scanned++;
       if(text.length<40||items.length>=6) return;
+      // One recap bullet often links several accounts ("…now leads SimpleBench
+      // at 88.4%, @someone adds…"). Emitting one event per link put the exact
+      // same sentence on the AI board twice, under two different tweet urls.
+      // One bullet is one story.
+      if(seenText.has(text)) return;
+      seenText.add(text);
       items.push(event('AINews','ai',{sourceId:href,title:text.slice(0,220),url:href,publishedAt:post.publishedAt||null,evidence:text.slice(0,1900)}));
     };
     // One tweet per theme (h2 subsection) rather than the first N of the lead

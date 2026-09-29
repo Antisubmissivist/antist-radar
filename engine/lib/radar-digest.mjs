@@ -11,9 +11,9 @@ const LABEL = {
   en: { ai: 'AI', tech: 'Tech', 'japan-residence': 'Residency & rules', 'japan-life': 'Japan life', geopolitics: 'Geopolitics', crypto: 'Crypto', stocks: 'Stocks', christianity: 'Christianity' },
 };
 const T = {
-  zh: { title: '每日简报', forecast: '预测', none: '（今日无更新）', nof: '（暂无已发布预测）', more: '想看更多内容，请访问本站', colTitle: '标题', colBody: '内容', colLink: '链接' },
-  ja: { title: 'デイリーブリーフ', forecast: '予測', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）', more: 'もっと見るなら本サイトへ', colTitle: '見出し', colBody: '内容', colLink: 'リンク' },
-  en: { title: 'Daily brief', forecast: 'Forecasts', none: '(no updates today)', nof: '(no published forecasts yet)', more: 'More updates on the site', colTitle: 'Headline', colBody: 'Summary', colLink: 'Link' },
+  zh: { title: '每日简报', forecast: '预测', none: '（今日无更新）', nof: '（暂无已发布预测）', more: '想看更多内容，请访问本站', colTitle: '标题', colBody: '内容', colLink: '链接', colFcTarget: '标的', colFcProb: '概率', colFcCall: '预判' },
+  ja: { title: 'デイリーブリーフ', forecast: '予測', none: '（本日の更新なし）', nof: '（公開済みの予測はありません）', more: 'もっと見るなら本サイトへ', colTitle: '見出し', colBody: '内容', colLink: 'リンク', colFcTarget: '銘柄', colFcProb: '確率', colFcCall: '予測' },
+  en: { title: 'Daily brief', forecast: 'Forecasts', none: '(no updates today)', nof: '(no published forecasts yet)', more: 'More updates on the site', colTitle: 'Headline', colBody: 'Summary', colLink: 'Link', colFcTarget: 'Symbol', colFcProb: 'Probability', colFcCall: 'Call' },
 };
 
 const cell = s => String(s ?? '').replace(/\|/g, '\\|').replace(/\s+/g, ' ').trim();
@@ -104,14 +104,18 @@ export function buildMarkdown(s, lang = 'zh', boards) {
     const items = selectBoard(s.events, b, PER);
     out.push(`<details><summary>${EMOJI[b]} ${L[b]}（${items.length}）</summary>`, '');
     out.push('| ' + t.colTitle + ' | ' + t.colBody + ' | ' + t.colLink + ' |', '| --- | --- | --- |');
-    if (items.length) for (const e of items) { const dl = e.deadlineAt ? ('⏰ ' + String(e.deadlineAt).slice(0, 10) + ' · ') : ''; out.push(`| ${cut(e.title?.[lang], 200)} | ${cut(dl + (e.summary?.[lang] || e.action?.[lang]), 200)} | [链接](${e.url}) |`); }
+    if (items.length) for (const e of items) { const dl = e.deadlineAt ? ('⏰ ' + String(e.deadlineAt).slice(0, 10) + ' · ') : ''; out.push(`| ${cut(e.title?.[lang], 200)} | ${cut(dl + (e.summary?.[lang] || e.action?.[lang]), 200)} | [${t.colLink}](${e.url}) |`); }
     else out.push(`| ${t.none} | — | — |`);
     out.push('', '</details>', '');
   }
   const fs = (s.forecasts || []).slice(0, 10);
   out.push(`<details><summary>🔮 ${t.forecast}（${fs.length}）</summary>`, '');
-  if (fs.length) for (const f of fs) out.push(`- \`${f.symbol}\` ${f.direction === 'above' ? '↑' : '↓'} · ${Math.round(Number(f.probability) * 100)}% · ${f.dueAt.slice(0, 10)} — ${cut(f.claim?.[lang], 120)}`);
-  else out.push(`- ${t.nof}`);
+  // A table like every board above it: the target, the number a reader can
+  // check, and the call itself — which carries the deadline and the baseline it
+  // is measured against, so those are not repeated as their own columns.
+  out.push('| ' + t.colFcTarget + ' | ' + t.colFcProb + ' | ' + t.colFcCall + ' |', '| --- | --- | --- |');
+  if (fs.length) for (const f of fs) out.push(`| \`${f.symbol}\` ${f.direction === 'above' ? '↑' : '↓'} | ${Math.round(Number(f.probability) * 100)}% | ${cut(f.claim?.[lang], 200)} |`);
+  else out.push(`| ${t.nof} | — | — |`);
   out.push('', '</details>');
   out.push('', `📡 ${t.more} → [radar.antist.ai](https://radar.antist.ai/${lang})`);
   return out.join('\n');

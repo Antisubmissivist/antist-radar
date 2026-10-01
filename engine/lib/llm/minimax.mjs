@@ -31,7 +31,9 @@ export class MiniMaxProvider extends LLMProvider {
         // max_tokens too. Without headroom it spends the whole budget thinking
         // and returns an empty content, which used to surface as a bare
         // "Unexpected end of JSON input" three retries later.
-        max_tokens: (opts.maxTokens || 4096) + REASONING_HEADROOM,
+        max_tokens: (opts.maxTokens || 4096) + (opts.thinking === 'disabled' ? 0 : REASONING_HEADROOM),
+        ...(this.model === 'MiniMax-M3' && opts.thinking ? { thinking: { type: opts.thinking } } : {}),
+        temperature: 0.2,
         reasoning_split: true,
         messages: [
           { role: 'system', content: systemPrompt },

@@ -102,8 +102,10 @@ describe('selectFallbackProvider', () => {
     // secret) but failed in the deploy job, which sets neither — and took every
     // deploy down with it for a day. Pin the environment the assertion depends on.
     const savedKey = process.env.OPENCODE_API_KEY;
+    const savedProvider = process.env.RADAR_LLM_FALLBACK_PROVIDER;
     const savedModel = process.env.RADAR_LLM_FALLBACK_MODEL;
     process.env.OPENCODE_API_KEY = 'sk-test';
+    process.env.RADAR_LLM_FALLBACK_PROVIDER = 'opencode';
     process.env.RADAR_LLM_FALLBACK_MODEL = 'glm-5.3-flash';
     try {
       const primary = createLLMProvider({ provider: 'opencode', apiKey: 'sk-test', model: 'deepseek-v4.1-flash' });
@@ -113,6 +115,7 @@ describe('selectFallbackProvider', () => {
       assert.equal(fb.model, 'glm-5.3-flash');
     } finally {
       if (savedKey === undefined) delete process.env.OPENCODE_API_KEY; else process.env.OPENCODE_API_KEY = savedKey;
+      if (savedProvider === undefined) delete process.env.RADAR_LLM_FALLBACK_PROVIDER; else process.env.RADAR_LLM_FALLBACK_PROVIDER = savedProvider;
       if (savedModel === undefined) delete process.env.RADAR_LLM_FALLBACK_MODEL; else process.env.RADAR_LLM_FALLBACK_MODEL = savedModel;
     }
   });
@@ -120,12 +123,27 @@ describe('selectFallbackProvider', () => {
   it('refuses a fallback identical to the primary', () => {
     const primary = createLLMProvider({ provider: 'opencode', apiKey: 'sk-test', model: 'glm-5.3-flash' });
     const saved = process.env.RADAR_LLM_FALLBACK_MODEL;
+    const savedProvider = process.env.RADAR_LLM_FALLBACK_PROVIDER;
+    process.env.RADAR_LLM_FALLBACK_PROVIDER = 'opencode';
     process.env.RADAR_LLM_FALLBACK_MODEL = 'glm-5.3-flash';
     try {
       assert.equal(selectFallbackProvider(primary), null);
     } finally {
+      if (savedProvider === undefined) delete process.env.RADAR_LLM_FALLBACK_PROVIDER; else process.env.RADAR_LLM_FALLBACK_PROVIDER = savedProvider;
       if (saved === undefined) delete process.env.RADAR_LLM_FALLBACK_MODEL;
       else process.env.RADAR_LLM_FALLBACK_MODEL = saved;
+    }
+  });
+
+  it('does not route MiniMax M3 retries back to OpenCode by default', () => {
+    const names = ['RADAR_LLM_FALLBACK_PROVIDER', 'RADAR_LLM_FALLBACK_MODEL'];
+    const saved = names.map(k => process.env[k]);
+    names.forEach(k => delete process.env[k]);
+    try {
+      const primary = createLLMProvider({ provider: 'minimax', apiKey: 'sk-test', model: 'MiniMax-M3' });
+      assert.equal(selectFallbackProvider(primary), null);
+    } finally {
+      names.forEach((k, i) => { if (saved[i] === undefined) delete process.env[k]; else process.env[k] = saved[i]; });
     }
   });
 });

@@ -270,8 +270,8 @@ async function forecastOnce(provider,freshMarkets,catalysts){
 // exists is covered by a test: the previous rule returned null whenever the
 // vendor matched, which would silently disable the fallback altogether.
 export function selectFallbackProvider(primary){
-  const name=String(process.env.RADAR_LLM_FALLBACK_PROVIDER||'opencode').toLowerCase();
-  const model=String(process.env.RADAR_LLM_FALLBACK_MODEL||'glm-5.3-flash');
+  const name=String(process.env.RADAR_LLM_FALLBACK_PROVIDER||'minimax').toLowerCase();
+  const model=String(process.env.RADAR_LLM_FALLBACK_MODEL||'MiniMax-M3');
   // Same vendor is fine as long as the model differs: a different model is a
   // different backend. Only a genuinely identical target is pointless.
   if(name===primary.name&&model===primary.model)return null;

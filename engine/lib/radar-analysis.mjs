@@ -4,10 +4,32 @@ import {writeFile} from 'node:fs/promises';
 import {selectionSystemPrompt,PERSONA_EN} from './persona.mjs';
 import {sourceTier,TIER_RANK,adjustScore} from './source-tier.mjs';
 import {judgeEdition} from './radar-judge.mjs';
-import {CATEGORIES} from './radar-contract.mjs';
+import {CATEGORIES,multilingual} from './radar-contract.mjs';
+import {validateEditorial} from './radar-editorial.mjs';
+import {jsonrepair} from 'jsonrepair';
 
 const chunk=(a,n)=>{const o=[];for(let i=0;i<a.length;i+=n)o.push(a.slice(i,i+n));return o;};
-const parseJson=t=>{const f=String(t||'').replace(/^```(?:json)?\s*|\s*```$/g,'').trim();const a=f.indexOf('{'),b=f.lastIndexOf('}');return JSON.parse(a>=0&&b>a?f.slice(a,b+1):f);};
+export function parseJson(t){
+  const f=String(t||'').replace(/^```(?:json)?\s*|\s*```$/g,'').trim();
+  const a=f.indexOf('{');
+  if(a<0)throw new Error('No JSON object in analysis');
+  let depth=0,quoted=false,escaped=false,end=-1;
+  for(let i=a;i<f.length;i++){
+    const c=f[i];
+    if(quoted){if(escaped)escaped=false;else if(c==='\\')escaped=true;else if(c==='"')quoted=false;continue;}
+    if(c==='"')quoted=true;
+    else if(c==='{')depth++;
+    else if(c==='}'&&--depth===0){end=i+1;break;}
+  }
+  if(end<0)throw new Error('Truncated analysis JSON');
+  const raw=f.slice(a,end);
+  if(f.slice(end).trim())console.warn(JSON.stringify({event:'analysis-json-trailing-content',chars:f.length-end}));
+  try{return JSON.parse(raw);}catch(e){
+    const parsed=JSON.parse(jsonrepair(raw));
+    console.warn(JSON.stringify({event:'analysis-json-repaired',reason:e.message}));
+    return parsed;
+  }
+}
 
 function extractScoredItems(text){
   try{const j=parseJson(text);if(j&&Array.isArray(j.items))return j.items;}catch{}
@@ -119,9 +141,11 @@ const ITEM_SYS=`あなたは日本語・英語・中国語の編集者です。�
 - action は「本站评价」: 最も合う一つの視点（現代世俗人文主義／逃避主義／AI本主義）を選び、2–4 文の純粋な評価を書く。命令・助言・行動指示は禁止。生活に即した比喩を一つ。視点名は書かない。
 - action には【反証可能な判断】か【具体的な帰結】のどちらかを必ず含める。どちらも書けなければ "" （空文字列）。空欄は常識論より価値が高い。
 - 読者像（選定と語調のためだけに使う。本文に絶対に書かない）: ${PERSONA_EN}
-Return {"ja":{"items":[{"id":"...","title":"...","summary":"...","audience":"...","action":"...","unknowns":"..."}]},"en":{same shape},"zh":{same shape}}`;
+actionに製品名の数字（M3、GPT-5等）や年を含めない。「このモデル」「この変更」などと言い換える。資料にない性能の長所・弱点・利用者の経験を事実として書かない。
+Return exactly one JSON object. Escape double quotes inside all string values. No text outside it.
+{"ja":{"items":[{"id":"...","title":"...","summary":"...","audience":"...","action":"...","unknowns":"..."}]},"en":{"items":[{"id":"...","title":"...","summary":"...","audience":"...","action":"...","unknowns":"..."}]},"zh":{"items":[{"id":"...","title":"...","summary":"...","audience":"...","action":"...","unknowns":"..."}]}}`;
 
-const DIGEST_SYS=`次の見出し一覧から、日本語・英語・中国語で短い総括を書く。各 ≤240 文字、数字・金額・日付なし。JSON のみ: {"ja":"...","en":"...","zh":"..."}`;
+const DIGEST_SYS=`次の見出し一覧から、日本語・英語・中国語で短い総括を書く。各 ≤240 文字、数字・金額・日付なし。製品名の数字も禁止：GPT-5なら「AIモデル」、M3なら「新モデル」と書く。JSON のみ: {"ja":"...","en":"...","zh":"..."}`;
 const FORECAST_SYS=`最新の市場クオート（markets）と、直近の重要ニュース催化剤（catalysts: 銘柄やマクロに関連する最新の出来事）を結びつけ、暗号資産を最大1つ・株式/指数を最大1つ、因果関係に基づく明確な方向性仮説を作る。
 【ルール】
 1. 必ず catalysts の中にある実際のニュース・出来事（空売り開示、規制法案、金利・インフレ動向、AI/テック地殻変動、地政学など）を直接の根拠として銘柄を選び、rationale で言及すること。催化剤と無関係な根拠のない当て推量は禁止。
@@ -154,8 +178,8 @@ export const GENERIC_UNKNOWN=/(eligibility|applicability)[^.]{0,80}(been establi
  * "Editor's take" is vacuous is NOT something code can do reliably, so that
  * constraint lives in the prompt and this only catches repeats and stubs.
  */
-function scrubFields(lanes){
-  const stats={personaLeak:0,genericUnknown:0,duplicate:0,tooShort:0};
+export function scrubFields(lanes){
+  const stats={personaLeak:0,genericUnknown:0,duplicate:0,tooShort:0,numericalAction:0};
   const txt=v=>typeof v==='string'?v.trim():'';
   const LANGS=['ja','en','zh'];
   const FIELDS=['audience','unknowns','action'];
@@ -185,7 +209,8 @@ function scrubFields(lanes){
       for(const l of LANGS){
         const v=txt(row[l]&&row[l][f]);
         if(!v){kill=kill||'missing';continue;}
-        if(f==='audience'&&PERSONA_LEAK.test(v))kill=kill||'personaLeak';
+        if(f==='action'&&/[0-9０-９]/u.test(v))kill=kill||'numericalAction';
+        else if(f==='audience'&&PERSONA_LEAK.test(v))kill=kill||'personaLeak';
         else if(f==='unknowns'&&GENERIC_UNKNOWN.test(v))kill=kill||'genericUnknown';
         else if(v.length<12)kill=kill||'tooShort';
         else if((dupes[l][f].get(v)||0)>1)kill=kill||'duplicate';
@@ -242,8 +267,9 @@ const MIN_KEPT=3;
 // that cannot be written is a digest that is not published.
 async function digestOnce(provider,candidates){
   const payload=JSON.stringify(candidates.map(e=>({title:typeof e.title==='object'?(e.title.zh||e.title.en||Object.values(e.title)[0]):e.title,category:e.category})));
+  let feedback='';
   for(let t=1;t<=3;t++){
-    try{const r=await provider.complete(DIGEST_SYS,payload,{maxTokens:8000,timeout:provider.name==='minimax'?180000:90000,thinking:'disabled'});const j=parseJson(r.text);if(j&&typeof j.ja==='string'&&typeof j.en==='string'&&typeof j.zh==='string')return j;}catch(e){console.error('[radar] digest attempt',t,'failed:',e.message);}
+    try{const r=await provider.complete(DIGEST_SYS+'\n'+feedback,payload,{maxTokens:8000,timeout:provider.name==='minimax'?180000:90000,thinking:'disabled'});const j=parseJson(r.text);multilingual(j);validateEditorial(j);return j;}catch(e){feedback='The previous answer failed validation: '+e.message+'. Correct it. All three languages must contain zero digits, dates, amounts or numbered product names.';console.error('[radar] digest attempt',t,'failed:',e.message);}
     await new Promise(r=>setTimeout(r,1500*t));
   }
   return null;
@@ -337,7 +363,7 @@ export async function analyseRadar(events,markets){
       await writeFile('runs/analysis-response.json',JSON.stringify({attempt,editionData}));
       const judged=judgeEdition(editionData,events,markets);
       // Unusable as a whole (bad digest, or nothing survived) — always retry.
-      if(!judged.ok)throw new Error('Judge rejected: '+judged.errors.slice(0,3).join(' | '));
+      if(!judged.ok)throw new Error('Judge rejected: '+[...judged.errors.filter(e=>e.startsWith('digest:')),...judged.errors.filter(e=>!e.startsWith('digest:'))].slice(0,3).join(' | '));
 
       // Partial losses are tolerated rather than fatal: one card with an
       // ungrounded number should not cost the reader the other twenty. Retry

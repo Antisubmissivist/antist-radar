@@ -81,6 +81,14 @@ async function selectByPersona(provider,pool){
         moved.push(`${e.source}: ${e.category}→${proposed}`);
         e.category=proposed;
       }
+      // The model groups same-story reports into a "series", and we trust it over
+      // term overlap: it reads meaning, the matcher only reads words — and two
+      // write-ups of one event often share nothing but a company name, which is
+      // exactly what the matcher is built to ignore. The slug becomes the thread
+      // key at ingest, so follow-ups collapse into one card whatever their
+      // wording.
+      const series=String((row&&row.series)||'').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/^-+|-+$/g,'').slice(0,60);
+      if(series)e.series=series;
       scored.push(e);
     }
     if(moved.length)console.error(JSON.stringify({event:'reclassified',count:moved.length,moves:moved.slice(0,12)}));
@@ -372,6 +380,12 @@ export async function analyseRadar(events,markets){
       if(kept<need&&attempt<3)throw new Error(`Thin edition: kept ${kept}/${candidates.length}, need ${need} — ${judged.errors.slice(0,2).join(' | ')}`);
 
       if(judged.dropped>0)console.log(JSON.stringify({event:'partial-edition',kept,analysed:judged.analysed,dropped:judged.dropped,attempt,reasons:judged.errors.slice(0,6)}));
+      // Carry the model's series slug onto the published cards. The generated
+      // lane items come back without it; the candidate pool is where it was
+      // attached, so map it back by id. Ingest then uses it as the thread key and
+      // the board collapses a series to one card (the highest-scored one).
+      const seriesById=new Map(candidates.filter(c=>c.series).map(c=>[c.id,c.series]));
+      if(seriesById.size)for(const ev of (judged.result.events||[])){const sr=seriesById.get(ev.id);if(sr)ev.series=sr;}
       return {...judged.result,status:judged.dropped>0?'degraded':'complete',usage:null};
     }catch(e){lastError=e;console.error(`[radar] analysis attempt ${attempt}/3 rejected: ${e.message}`);}
   }

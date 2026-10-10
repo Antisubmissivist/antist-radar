@@ -50,6 +50,7 @@ export function publicSnapshot(input, privateValues = []) {
     audience:multilingual(e.audience,FIELD_MAX.audience), action:multilingual(e.action,FIELD_MAX.action), unknowns:multilingual(e.unknowns,FIELD_MAX.unknowns),
     evidence:text(e.evidence,2000), change:choice(e.change,['new','updated','unchanged']),
     score:Math.max(0,Math.min(100,Math.round(Number(e.score)||0))),
+    series:e.series?text(e.series,60):undefined,
     tier:choice(e.tier||'data',['x','primary','media','data']),
   }));
   if (new Set(events.map(e=>e.id)).size!==events.length) throw new Error('Duplicate event');

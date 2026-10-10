@@ -448,8 +448,11 @@ app.post('/api/ingest',async c=>{
   const threadOf=new Map<string,{id:string;terms:string}>();
   for(const e of (s.events||[])){
     const terms=eventTerms(e);
-    // Later events in the same sweep can continue a thread opened earlier in it.
-    const id=pickThread(terms,nowIso,history,common)||`t${e.id.slice(0,12)}`;
+    // The model's own "series" slug is the thread key when present: it reads the
+    // stories, the term matcher only reads words, and two write-ups of one event
+    // often share nothing but a company name. Term overlap stays as the fallback
+    // for items the model did not group (and for pre-series history).
+    const id=(e as any).series?('sr'+String((e as any).series).replace(/[^a-z0-9-]/g,'')):(pickThread(terms,nowIso,history,common)||`t${e.id.slice(0,12)}`);
     threadOf.set(e.id,{id,terms:serializeTerms(terms)});
     history.push({threadId:id,terms,source:String(e.source||''),at:nowIso});
   }

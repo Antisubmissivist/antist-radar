@@ -44,7 +44,7 @@ const droppedDuplicate=withEvidence.length-unique.length;
 if(droppedDuplicate)console.error(JSON.stringify({event:'dropped-downstream-duplicate',count:droppedDuplicate}));
 // Pool composition, so "source X never appears on the site" can be told apart
 // from "source X never reaches the pool" without guesswork.
-{const c={};for(const x of unique)c[x.source]=(c[x.source]||0)+1;console.error(JSON.stringify({event:'pool-sources',total:unique.length,Bluesky:c.Bluesky||0,WHO:c.WHO||0,ReliefWeb:c.ReliefWeb||0,OFAC:c.OFAC||0}));}
+{const c={};for(const x of unique)c[x.source]=(c[x.source]||0)+1;console.error(JSON.stringify({event:'pool-sources',total:unique.length,Bluesky:c.Bluesky||0,WHO:c.WHO||0,ReliefWeb:c.ReliefWeb||0,OFAC:c.OFAC||0}));const cc={};for(const x of unique)cc[x.category]=(cc[x.category]||0)+1;console.error(JSON.stringify({event:'pool-categories',cat:cc}));}
 async function fetchRemoteState(endpoint,token){
   if(!token)return null;
   try{

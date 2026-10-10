@@ -310,7 +310,8 @@ export async function analyseRadar(events,markets){
   // Candidate pool (all eligible changed events across boards; 70 cap to prevent
   // model JSON truncation), filled board by board so no board is starved,
   // scored by the persona; the code then takes the top 3 per board.
-  const pool=fairPool(sorted,70);
+  const pool=fairPool(sorted,100);
+  {const c={};for(const e of pool)c[e.category]=(c[e.category]||0)+1;console.error(JSON.stringify({event:'pool-pooled',n:pool.length,cat:c}));}
   const picked=await selectByPersona(provider,pool);
   const candidateSymbols=['BTC-USD','ETH-USD','SOL-USD','^GSPC','^IXIC','^N225','CL=F','GC=F','NVDA','MSFT','GOOGL','META','AVGO','TSM','AMD','PLTR','SMH','7203.T','6758.T'];
   const freshMarkets=markets.filter(q=>Number.isFinite(q.price)&&q.price>0&&Date.now()-Date.parse(q.at)<5*86400000&&candidateSymbols.includes(q.symbol));

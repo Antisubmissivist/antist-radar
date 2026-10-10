@@ -151,12 +151,16 @@ export async function ainews() {
       seenText.add(text);
       items.push(event('AINews','ai',{sourceId:href,title:text.slice(0,220),url:href,publishedAt:post.publishedAt||null,evidence:text.slice(0,1900)}));
     };
-    // One tweet per theme (h2 subsection) rather than the first N of the lead
-    // story: the recap opens with a dozen tweets about the same launch, and a
-    // board fed twelve versions of one story is a board with one card.
-    const subs=$('h2').toArray();
-    if(subs.length) for(const h2 of subs) push($(h2).nextUntil('h2').find('a[href]').filter((_,a)=>STATUS.test($(a).attr('href')||'')).first().get(0));
-    else $('a[href]').each((_,a)=>push(a));
+    // One tweet per THEME, because one theme is one story. Themes are the
+    // top-level <p><strong> headings; the <strong>s inside <li> are just bullet
+    // labels under a theme. Taking every tweet — which the old fallback did when
+    // a recap had no <h2> — is how a single story (one lab firing three
+    // researchers, written up under five labels) filled the AI board with
+    // itself three times.
+    const firstTweet=(scope)=>scope.find('a[href]').filter((_,a)=>STATUS.test($(a).attr('href')||'')).first().get(0);
+    const themes=$('p > strong').toArray().filter(el=>!$(el).closest('li').length).map(el=>$(el).closest('p'));
+    if(themes.length){for(let i=0;i<themes.length;i++){const link=firstTweet(themes[i].nextUntil(themes[i+1]||undefined));if(link)push(link);}}
+    else{const subs=$('h2').toArray();if(subs.length)for(const h2 of subs){const link=firstTweet($(h2).nextUntil('h2'));if(link)push(link);}else $('a[href]').each((_,a)=>push(a));}
   }
   return {items,scanned};
 }

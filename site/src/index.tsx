@@ -68,14 +68,14 @@ function StoryRail({steps,currentId,l,w}:{steps:Step[];currentId:string;l:Locale
   const key=days===0?'threadToday':days===1?'threadDay':'threadSpan';
   const label=w[key].replace('{n}',String(steps.length)).replace('{d}',String(days));
   return <details class="mt-3">
-    <summary class="flex items-center gap-2 cursor-pointer select-none text-[11px] text-muted-foreground hover:text-foreground transition-colors">
-      <span class="flex items-center gap-[3px] shrink-0">
+    <summary class="flex flex-wrap items-center gap-x-2 gap-y-1 cursor-pointer select-none text-[11px] text-muted-foreground hover:text-foreground transition-colors">
+      <span class="flex flex-wrap items-center gap-[3px] min-w-0">
         {steps.map((s,i)=><span class="flex items-center gap-[3px]">
           {i>0?<span class="w-2.5 h-px bg-border"/>:null}
           <span class={i===idx?'w-[7px] h-[7px] rounded-full bg-primary':'w-[5px] h-[5px] rounded-full bg-muted-foreground/40'}/>
         </span>)}
       </span>
-      <span class="truncate">{label}</span>
+      <span class="min-w-0">{label}</span>
     </summary>
     <ol class="mt-3 ml-[3px] border-l border-border pl-4 space-y-3">
       {steps.map((s,i)=><li class="relative">

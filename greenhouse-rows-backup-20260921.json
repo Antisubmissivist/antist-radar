@@ -1,0 +1,66 @@
+﻿[
+  {
+    "results": [
+      {
+        "id": "83937be290080fe9377441f9",
+        "source": "Greenhouse · Cloudflare",
+        "category": "japan-life",
+        "url": "https://boards.greenhouse.io/cloudflare/jobs/8024849?gh_jid=8024849",
+        "published_at": null,
+        "first_seen": "2026-09-12T08:11:28.340Z",
+        "last_seen": "2026-09-12T08:11:28.340Z",
+        "stage": "open",
+        "deadline_at": null,
+        "change": "new",
+        "title_json": "{\"ja\":\"Cloudflare、営業報酬設計・戦略のシニアプリンシパルを米国リモートで募集\",\"en\":\"Cloudflare seeks Senior Principal, Sales Compensation Design & Strategy, US remote\",\"zh\":\"Cloudflare 招聘销售薪酬设计与战略资深首席，美国远程\"}",
+        "summary_json": "{\"ja\":\"雇用主はCloudflare。勤務地はリモートで、応募は米国拠点。更新は2026年9月4日、応募受付は2026年10月13日まで。GTM戦略・計画・運用チームが、AI支援の計画・運用、販売能力計画、セグメント、テリトリー、ノルマ設定、報酬設計を担う。\",\"en\":\"Cloudflare US-remote Senior Principal for sales compensation design; applications close October 13, 2026. GTM planning, quotas and AI-supported sales ops.\",\"zh\":\"雇主为 Cloudflare。职位为远程，但地点在美国。更新于2026-09-04，申请截止2026年10月13日。GTM战略、规划与运营团队负责销售规划、配额与AI支持的销售运营。\"}",
+        "audience_json": "{\"ja\":\"東京在住でAI・テック企業の求人や、日本での就労・居住ルールに関心がある若い読者。\",\"en\":\"A young Tokyo reader interested in AI, startups, tech jobs and the practical rules of work and residency in Japan.\",\"zh\":\"关注AI、初创企业、科技岗位，以及在日工作与居留实际规则的东京年轻读者。\"}",
+        "action_json": "{\"ja\":\"AIを前提に営業組織を設計する求人は、人間の裁量をどこに残すかを問いかける。地図を描き直す仕事に似て、線を引くほど現場の声が遠のく危うさもある。効率の物語と、人の納得は同じ図面には収まらない。\",\"en\":\"A role that designs sales organizations around AI asks where human judgment still belongs. It resembles redrawing a map: the sharper the lines, the easier the voices on the ground can fade. Efficiency and consent do not fit on the same blueprint.\",\"zh\":\"围绕AI来设计销售组织的岗位，真正的问题是人的判断还能留在哪里。它像重画一张地图：线条越清晰，地面上的声音越容易变远。效率与认同，并不总能落在同一张图纸上。\"}",
+        "unknowns_json": "{\"ja\":\"\",\"en\":\"\",\"zh\":\"\"}",
+        "evidence": "Employer: Cloudflare. Location: Remote. Updated: 2026-09-04T10:59:17-04:00. Locations US Applications will be accepted until October 13, 2026. About the Role The Global GTM Strategy, Planning and Operations team at Cloudflare supports our high-growth Sales organization through scalable, AI supported GTM planning and operations. We focus on thoughtful planning of sales capacity, segmentation, territory carving, quota setting, and compensation design while ensuring clear rules of engagement for our Sales Team. Our goal is to establish a cohesive, consistent process framework that can support high growth, enable the Company's strategy, and accelerate Cloudflare's leadership in the developer and AI-native business segments. As the Senior Principal, Sales Compensation Design & Strategy, you will design and manage Cloudflare's Sales Compensation Plans across all customer facing teams including Sales, Technical Sales, Partner Sales, and Customer Success & Experience, to ensure they are motivating, aligned with Cloudflare's strategy, and industry leading. This is a high visibility role with significant executive engagement, including leading C-level discussions with our CRO, CFO, CPO, and COO, and serving as the design authority on the Executive Compensation Steering Committee. You will architect new compensation metrics that reflect how Cloudflare monetizes a developer first, AI supportive business - including consumption, adoption, and platform attach - and ",
+        "score": 15,
+        "thread_id": "t83937be29008",
+        "thread_terms": "cloudflare senior principal sales compensation design strategy"
+      },
+      {
+        "id": "3ad75e3ca21f3520338fd622",
+        "source": "Greenhouse · Cloudflare",
+        "category": "japan-life",
+        "url": "https://boards.greenhouse.io/cloudflare/jobs/7767743?gh_jid=7767743",
+        "published_at": null,
+        "first_seen": "2026-09-12T14:48:54.373Z",
+        "last_seen": "2026-09-21T01:23:29.812Z",
+        "stage": "open",
+        "deadline_at": null,
+        "change": "unchanged",
+        "title_json": "{\"ja\":\"Cloudflare、東京でシニアセールスマネージャー募集 デジタルネイティブ企業向け\",\"en\":\"Cloudflare hiring Senior Sales Manager for digital-native accounts in Tokyo\",\"zh\":\"Cloudflare 在东京招聘资深销售经理 负责数字原生企业业务\"}",
+        "summary_json": "{\"ja\":\"Cloudflareが東京拠点で、デジタルネイティブ企業を担当するアカウントエグゼクティブチームを率いるシニアセールスマネージャーを募集。\",\"en\":\"Cloudflare is recruiting a Senior Sales Manager in Tokyo to lead Account Executives focused on digital-native accounts in Japan.\",\"zh\":\"Cloudflare 在东京招聘资深销售经理，带领专注于日本数字原生企业客户的客户经理团队。\"}",
+        "audience_json": "{\"ja\":\"SaaS・クラウド領域でセールスリーダー経験を次のステップに活かしたい人\",\"en\":\"Sales leaders in the SaaS or cloud space looking to step up into a bigger role in a tech company\",\"zh\":\"希望在 SaaS 或云技术领域晋升销售管理岗位的人\"}",
+        "action_json": "{\"ja\":\"一つの求人票は、市場全体の天気図ではなく、一点の風向きを示す矢印のようなものだ。東京常駐でデジタルネイティブ企業を担当するという制約上、SaaSやAPI中心の顧客経験がないと、面接まで進む可能性は低い。\",\"en\":\"A single job posting is more a weathervane than a weather map for the whole market. Fixed in Tokyo and built around cloud-born, API-first clients, it is unlikely to advance candidates without that vertical experience past the recruiter screen.\",\"zh\":\"一则招聘启事更像屋顶上的风向标，而非整片市场的天气图。岗位明确锁定在东京、面向云原生与 API 为先的客户群，缺乏此类行业经验的人很难通过初筛。\"}",
+        "unknowns_json": "{\"ja\":\"具体的な年収レンジ、ビザ・スポンサーの有無、必須の日本語力レベル、管轄するチーム人数\",\"en\":\"The salary range, visa sponsorship availability, required Japanese proficiency, and team headcount under this role\",\"zh\":\"具体薪资范围、签证担保支持、对日语能力的要求、该职位下辖团队规模\"}",
+        "evidence": "Employer: Cloudflare. Location: Tokyo, Japan. Updated: 2026-09-04T10:59:17-04:00. Locations: Tokyo, JapanAbout the RoleJapan's digital-native ecosystem — companies born in the cloud, engineering-led, and scaling globally — represents one of the fastest-growing segments in our market. We are building a dedicated Digital Native Business (DNB) sales motion to serve these accounts: companies like leading marketplace platforms, fintech innovators, gaming studios, SaaS providers, and AI-native startups that think API-first and ship continuously.You will lead a team of Account Executives focused exclusively on digital-native accounts in Japan, coaching them to win deals at companies.The ideal candidate is a player-coach and builder: someone who has personally hunted and won digital-native logos, and who can attract, hire, and develop a team of self-sourcing hunters to do the same. You will operate at the intersection of Japanese B2B culture and a fast-moving global HQ, advocating for your team and your customers with equal intensity.This role reports to the Head of Territory Sales, Japan.Responsibilities Build the DNB team from the ground up: own recruiting, hiring, onboarding, and ramping a team of Account Executives dedicated to digital-native accounts. Meet or exceed quarterly and annual team revenue targets through a self-sourced, hunting-led pipeline motion. Player-coach: personally open doors at strategic accounts, model consultative and technical selling, an",
+        "score": 58,
+        "thread_id": "t83937be29008",
+        "thread_terms": "cloudflare hiring senior sales manager digital natives tokyo"
+      }
+    ],
+    "success": true,
+    "meta": {
+      "served_by": "v3-prod",
+      "served_by_region": "APAC",
+      "served_by_colo": "KIX",
+      "served_by_primary": true,
+      "timings": {
+        "sql_duration_ms": 2.0946
+      },
+      "duration": 2.0946,
+      "changes": 0,
+      "last_row_id": 0,
+      "changed_db": false,
+      "size_after": 2895872,
+      "rows_read": 599,
+      "rows_written": 0,
+      "total_attempts": 1
+    }
+  }
+]

@@ -135,15 +135,21 @@ describe('selectFallbackProvider', () => {
     }
   });
 
-  it('does not route MiniMax M3 retries back to OpenCode by default', () => {
+  it('defaults the fallback to a sibling OpenCode model', () => {
     const names = ['RADAR_LLM_FALLBACK_PROVIDER', 'RADAR_LLM_FALLBACK_MODEL'];
     const saved = names.map(k => process.env[k]);
+    const savedKey = process.env.OPENCODE_API_KEY;
     names.forEach(k => delete process.env[k]);
+    process.env.OPENCODE_API_KEY = 'sk-test';
     try {
-      const primary = createLLMProvider({ provider: 'minimax', apiKey: 'sk-test', model: 'MiniMax-M3' });
-      assert.equal(selectFallbackProvider(primary), null);
+      const primary = createLLMProvider({ provider: 'opencode', apiKey: 'sk-test', model: 'deepseek-v4.1-flash' });
+      const fb = selectFallbackProvider(primary);
+      assert.ok(fb, 'a fallback must exist by default');
+      assert.equal(fb.name, 'opencode');
+      assert.equal(fb.model, 'glm-5.3-flash');
     } finally {
       names.forEach((k, i) => { if (saved[i] === undefined) delete process.env[k]; else process.env[k] = saved[i]; });
+      if (savedKey === undefined) delete process.env.OPENCODE_API_KEY; else process.env.OPENCODE_API_KEY = savedKey;
     }
   });
 });

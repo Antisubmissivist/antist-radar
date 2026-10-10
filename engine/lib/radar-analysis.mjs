@@ -227,9 +227,7 @@ export function scrubFields(lanes){
 // Fan-out with bounded concurrency and per-batch retries; every batch must succeed
 // (the caller also checks coverage) so a board never silently loses its items.
 async function runItems(provider,candidates){
-  // M3's three-language output for three stories repeatedly timed out or
-  // returned broken JSON in the live CI. Keep each M3 request to one story.
-  const batches=chunk(candidates,provider.name==='minimax'?1:3);
+  const batches=chunk(candidates,3);
   const lanes={ja:[],en:[],zh:[]};
   const pending=batches.slice();
   const merge=(res)=>{for(const l of ['ja','en','zh']){const items=res[l]&&res[l].items;if(Array.isArray(items))lanes[l].push(...items);}};
@@ -269,7 +267,7 @@ async function digestOnce(provider,candidates){
   const payload=JSON.stringify(candidates.map(e=>({title:typeof e.title==='object'?(e.title.zh||e.title.en||Object.values(e.title)[0]):e.title,category:e.category})));
   let feedback='';
   for(let t=1;t<=3;t++){
-    try{const r=await provider.complete(DIGEST_SYS+'\n'+feedback,payload,{maxTokens:8000,timeout:provider.name==='minimax'?180000:90000,thinking:'disabled'});const j=parseJson(r.text);multilingual(j);validateEditorial(j);return j;}catch(e){feedback='The previous answer failed validation: '+e.message+'. Correct it. All three languages must contain zero digits, dates, amounts or numbered product names.';console.error('[radar] digest attempt',t,'failed:',e.message);}
+    try{const r=await provider.complete(DIGEST_SYS+'\n'+feedback,payload,{maxTokens:8000,timeout:90000});const j=parseJson(r.text);multilingual(j);validateEditorial(j);return j;}catch(e){feedback='The previous answer failed validation: '+e.message+'. Correct it. All three languages must contain zero digits, dates, amounts or numbered product names.';console.error('[radar] digest attempt',t,'failed:',e.message);}
     await new Promise(r=>setTimeout(r,1500*t));
   }
   return null;
@@ -286,20 +284,18 @@ async function forecastOnce(provider,freshMarkets,catalysts){
 }
 
 // Pick the model the final attempt runs on. A provider-wide outage is not
-// something more retries on the same endpoint can fix — opencode-go once
+// something more retries on the same endpoint can fix — OpenCode Go once
 // answered every call with a canned Chinese refusal for three hours.
 //
-// The fallback is now a DIFFERENT MODEL ON THE SAME VENDOR (GLM-5.3-Flash on
-// Go) rather than a different vendor. A canned refusal comes from a bad
-// backend, not a bad model, so a sibling model is enough to escape it — and it
-// shares the OPENCODE_API_KEY already in use, so there is no second key to run
-// dry (the old MiniMax fallback died of "Token Plan usage limit reached" the
-// first time it was needed). Exported so the guard that a fallback actually
-// exists is covered by a test: the previous rule returned null whenever the
-// vendor matched, which would silently disable the fallback altogether.
+// The fallback is a DIFFERENT MODEL ON THE SAME PLAN (GLM-5.3-Flash on Go): a
+// canned refusal comes from a bad backend, not a bad model, so a sibling model
+// is enough to escape it, and it shares the OPENCODE_API_KEY already in use.
+// Exported so the guard that a fallback actually exists is covered by a test:
+// the previous rule returned null whenever the vendor matched, which would
+// silently disable the fallback altogether.
 export function selectFallbackProvider(primary){
-  const name=String(process.env.RADAR_LLM_FALLBACK_PROVIDER||'minimax').toLowerCase();
-  const model=String(process.env.RADAR_LLM_FALLBACK_MODEL||'MiniMax-M3');
+  const name=String(process.env.RADAR_LLM_FALLBACK_PROVIDER||'opencode').toLowerCase();
+  const model=String(process.env.RADAR_LLM_FALLBACK_MODEL||'glm-5.3-flash');
   // Same vendor is fine as long as the model differs: a different model is a
   // different backend. Only a genuinely identical target is pointless.
   if(name===primary.name&&model===primary.model)return null;

@@ -1,6 +1,6 @@
 // Mistral provider — integration test (calls real API)
 // Requires MISTRAL_API_KEY environment variable
-// Run: MISTRAL_API_KEY=sk-... node --test test/llm-minimax-integration.test.mjs
+// Run: MISTRAL_API_KEY=sk-... node --test test/llm-mistral-integration.test.mjs
 
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';

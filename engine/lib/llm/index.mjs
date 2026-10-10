@@ -5,7 +5,6 @@ import { OpenAIProvider } from "./openai.mjs";
 import { OpenRouterProvider } from "./openrouter.mjs";
 import { GeminiProvider } from "./gemini.mjs";
 import { CodexProvider } from "./codex.mjs";
-import { MiniMaxProvider } from "./minimax.mjs";
 import { MistralProvider } from "./mistral.mjs";
 import { OllamaProvider } from "./ollama.mjs";
 import { GrokProvider } from "./grok.mjs";
@@ -18,7 +17,6 @@ export { OpenAIProvider } from "./openai.mjs";
 export { OpenRouterProvider } from "./openrouter.mjs";
 export { GeminiProvider } from "./gemini.mjs";
 export { CodexProvider } from "./codex.mjs";
-export { MiniMaxProvider } from "./minimax.mjs";
 export { MistralProvider } from "./mistral.mjs";
 export { OllamaProvider } from "./ollama.mjs";
 export { GrokProvider } from "./grok.mjs";
@@ -47,8 +45,6 @@ export function createLLMProvider(llmConfig) {
       return new GeminiProvider({ apiKey, model });
     case "codex":
       return new CodexProvider({ model });
-    case "minimax":
-      return new MiniMaxProvider({ apiKey, model });
     case "mistral":
       return new MistralProvider({ apiKey, model });
     case "ollama":

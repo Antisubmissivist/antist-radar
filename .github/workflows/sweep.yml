@@ -13,9 +13,17 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 25
     env:
-      LLM_PROVIDER: minimax
-      LLM_MODEL: MiniMax-M3
+      # Primary analysis model: DeepSeek V4.1 Flash on OpenCode Go. On the real
+      # scoring prompt it is the fastest (avg 25s vs MiniMax M3's 59s on 32
+      # candidates) and covered every candidate in 4/4 runs.
+      LLM_PROVIDER: opencode
+      LLM_MODEL: deepseek-v4.1-flash
+      OPENCODE_API_KEY: ${{ secrets.OPENCODE_API_KEY }}
+      # LLM_API_KEY carries the MiniMax key; the fallback below reads it.
       LLM_API_KEY: ${{ secrets.MINIMAX_API_KEY }}
+      # A different VENDOR on purpose: the outage this guards against is OpenCode
+      # Go itself (quota, or the canned-refusal window), which a sibling model on
+      # the same plan would not survive.
       RADAR_LLM_FALLBACK_PROVIDER: minimax
       RADAR_LLM_FALLBACK_MODEL: MiniMax-M3
       FRED_API_KEY: ${{ secrets.FRED_API_KEY }}

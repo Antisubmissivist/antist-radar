@@ -63,18 +63,6 @@ async function releases() {
     items.push(...rows.filter(r=>!r.draft&&!r.prerelease).slice(0,2).map(r=>event('GitHub Releases','tech',{sourceId:`${repo}:${r.id}`,title:`${repo} ${r.tag_name}`,url:r.html_url,publishedAt:iso(r.published_at),evidence:plain(r.body).slice(0,1800)})));
   }return {items,scanned};
 }
-async function grants() {
-  const endpoint='https://api.jgrants-portal.go.jp/exp/v1/public/subsidies';
-  const data=await request(endpoint+'?keyword=IT&sort=created_date&order=DESC&acceptance=1','json');
-  if(!Array.isArray(data.result)) throw new Error('Grants schema changed');
-  const items=await Promise.all(data.result.slice(0,6).map(async row=>{
-    const detail=await request(`${endpoint}/id/${row.id}`,'json');const d=detail.result?.[0];if(!d)throw new Error('Missing grant detail');
-    return event('JGrants','japan-life',{sourceId:row.id,title:row.title,url:d.front_subsidy_detail_page_url,
-      stage:Date.parse(row.acceptance_end_datetime)<Date.now()?'closed':'open',deadlineAt:iso(row.acceptance_end_datetime),
-      evidence:plain(`${d.detail||''} Region: ${row.target_area_search||''}. Employees: ${row.target_number_of_employees||''}. Purpose: ${d.use_purpose||''}. Industry: ${d.industry||''}. Deadline: ${row.acceptance_end_datetime}.`).slice(0,1900),
-      conditions:{region:String(row.target_area_search||'').split(' / ')},unknowns:'Business eligibility, expenses and required documents must be checked in the official application guidelines.'});
-  }));return {items,scanned:data.result.length};
-}
 async function policies() {
   const r=await feed('e-Gov','japan-life','https://public-comment.e-gov.go.jp/rss/pcm_list.xml','draft');
   // The official RSS identifies consultation, not an enacted rule.
@@ -365,10 +353,28 @@ export const FEEDS=[
   {name:'Engadget',url:'https://www.engadget.com/rss.xml',collect:()=>feed('Engadget','tech','https://www.engadget.com/rss.xml')},
   {name:'9to5Mac',url:'https://9to5mac.com/feed/',collect:()=>feed('9to5Mac','tech','https://9to5mac.com/feed/')},
   {name:'JVN',url:'https://jvn.jp/rss/',collect:()=>feed('JVN','tech','https://jvn.jp/rss/jvn.rdf')},
+  // Consumer-tech desk (2026-10-10). "tech" is the reader's second home after
+  // AI: devices and products, AI-powered or not, belong here and not on the AI
+  // board. The AI-adjacent wires under-cover gadgets and hardware, so these
+  // carry it.
+  {name:'Android Authority',url:'https://www.androidauthority.com/',collect:()=>feed('Android Authority','tech','https://www.androidauthority.com/feed/')},
+  {name:'MacRumors',url:'https://www.macrumors.com/',collect:()=>feed('MacRumors','tech','https://www.macrumors.com/macrumors.xml')},
+  {name:'9to5Google',url:'https://9to5google.com/',collect:()=>feed('9to5Google','tech','https://9to5google.com/feed/')},
+  {name:'GSMArena',url:'https://www.gsmarena.com/',collect:()=>feed('GSMArena','tech','https://www.gsmarena.com/rss-news-reviews.php3')},
+  {name:"Tom's Hardware",url:'https://www.tomshardware.com/',collect:()=>feed("Tom's Hardware",'tech','https://www.tomshardware.com/feeds/all')},
+  {name:'Wired',url:'https://www.wired.com/',collect:()=>feed('Wired','tech','https://www.wired.com/feed/rss')},
+  {name:'Gizmodo',url:'https://gizmodo.com/',collect:()=>feed('Gizmodo','tech','https://gizmodo.com/feed')},
+  {name:'GIGAZINE',url:'https://gigazine.net/',collect:()=>feed('GIGAZINE','tech','https://gigazine.net/news/rss_2.0/')},
   {name:'e-Gov',url:'https://public-comment.e-gov.go.jp/',collect:policies},
-  {name:'JGrants',url:'https://developers.digital.go.jp/documents/jgrants/api/',collect:grants},
   {name:'JASSO',url:'https://www.jasso.go.jp/ryugaku/',collect:()=>notices('JASSO','japan-life','https://www.jasso.go.jp/ryugaku/',/\/(news\/|ryugaku\/.+\/event\/|ryugaku\/.+\/admission)/)},
   {name:'Kokusen',url:'https://www.kokusen.go.jp/mimamori/mj_mglist.html',collect:()=>notices('Kokusen','japan-life','https://www.kokusen.go.jp/mimamori/mj_mglist.html',/\/mj_mailmag\/mj-shinsen\d+\.html$/)},
+  // National / Tokyo Japan-life desk (2026-10-10). The old japan-life sources
+  // were junk for this reader — municipal housing lotteries in tiny cities and
+  // SME M&A subsidies — and scored 5-25, so the board had nothing to show. These
+  // carry the domestic policy and daily-life news the board is meant to be about.
+  {name:'NHK 社会',url:'https://www3.nhk.or.jp/',collect:()=>feed('NHK 社会','japan-life','https://www3.nhk.or.jp/rss/news/cat1.xml',undefined,8)},
+  {name:'Yahoo 国内',url:'https://news.yahoo.co.jp/',collect:()=>feed('Yahoo 国内','japan-life','https://news.yahoo.co.jp/rss/topics/domestic.xml',undefined,8)},
+  {name:'ライブドア 国内',url:'https://news.livedoor.com/',collect:()=>feed('ライブドア 国内','japan-life','https://news.livedoor.com/topics/rss/dom.xml',undefined,8)},
   {name:'Bank of Japan',url:'https://www.boj.or.jp/rss/whatsnew.xml',collect:()=>feed('Bank of Japan','stocks','https://www.boj.or.jp/rss/whatsnew.xml')},
   {name:'Cointelegraph',url:'https://cointelegraph.com/rss',collect:()=>feed('Cointelegraph','crypto','https://cointelegraph.com/rss')},
   {name:'Decrypt',url:'https://decrypt.co/feed',collect:()=>feed('Decrypt','crypto','https://decrypt.co/feed')},
@@ -379,7 +385,6 @@ export const FEEDS=[
   {name:'Al Jazeera',url:'https://www.aljazeera.com/xml/rss/all.xml',collect:()=>feed('Al Jazeera','geopolitics','https://www.aljazeera.com/xml/rss/all.xml')},
   {name:'DW World',url:'https://rss.dw.com/rdf/rss-en-world',collect:()=>feed('DW World','geopolitics','https://rss.dw.com/rdf/rss-en-world')},
   {name:'Google News · 在留',url:'https://news.google.com/rss/search',collect:()=>gnews('Google News · 在留','japan-residence','在留資格 OR 出入国在留管理庁 OR 在留手続')},
-  {name:'Google News · UR/住宅',url:'https://news.google.com/rss/search',collect:()=>gnews('Google News · UR/住宅','japan-life','UR賃貸 OR 公営住宅 募集')},
   // Christianity desk. The wires carry the big church stories but the religion
   // specialists carry the ones a reader who follows the church actually wants,
   // so the board is fed from both: these feeds (prefill 'christianity') plus

@@ -57,6 +57,19 @@ const BY_NAME = new Map(Object.entries({
   // the discussion is first-hand but not an institutional fact. Media, not X —
   // it is not where the news breaks, it is where it gets argued about.
   Reddit: 'media',
+  // Consumer-tech desk (2026-10-10).
+  'Android Authority': 'media',
+  MacRumors: 'media',
+  '9to5Google': 'media',
+  GSMArena: 'media',
+  "Tom's Hardware": 'media',
+  Wired: 'media',
+  Gizmodo: 'media',
+  GIGAZINE: 'media',
+  // Japan domestic desk (2026-10-10).
+  'NHK 社会': 'media',
+  'Yahoo 国内': 'media',
+  'ライブドア 国内': 'media',
   'BBC World': 'media',
   'Al Jazeera': 'media',
   'DW World': 'media',

@@ -40,13 +40,19 @@ test('a board never pads itself with a duplicate story', () => {
   assert.deepEqual(picked.map(e => e.id), ['a']);
 });
 
-test('unscored rows are the fallback, newest first, still one per thread', () => {
-  const scored = ev('s', { score: 70, days: 0.1, thread: 'T1' });
-  const u1 = ev('u1', { score: 0, days: 0.2, thread: 'T2' });
-  const u2 = ev('u2', { score: 0, days: 0.3, thread: 'T2' }); // same thread as u1
-  const u3 = ev('u3', { score: 0, days: 0.4, thread: 'T3' });
-  const picked = selectBoard([scored, u1, u2, u3], 'ai', 3, now);
-  assert.deepEqual(picked.map(e => e.id), ['s', 'u1', 'u3']);
+// "Better one real story than three padded ones": a board shows only scored
+// cards. Unscored rows are a fallback for when scoring failed outright — never
+// filler to reach three, which is how a thin board ends up all weak news.
+test('a board shows scored cards only; unscored rows fill only an empty board', () => {
+  const s1 = ev('s1', { score: 70, days: 0.1, thread: 'T1' });
+  const s2 = ev('s2', { score: 64, days: 0.2, thread: 'T2' });
+  const u1 = ev('u1', { score: 0, days: 0.3, thread: 'T3' });
+  // two scored -> two cards; the unscored row is NOT padded in
+  assert.deepEqual(selectBoard([s1, s2, u1], 'ai', 3, now).map(e => e.id), ['s1', 's2']);
+  // nothing scored -> unscored rows are the fallback, newest first, one per thread
+  const u2 = ev('u2', { score: 0, days: 0.4, thread: 'T3' }); // same thread as u1
+  const u3 = ev('u3', { score: 0, days: 0.5, thread: 'T4' });
+  assert.deepEqual(selectBoard([u1, u2, u3], 'ai', 3, now).map(e => e.id), ['u1', 'u3']);
 });
 
 test('only the requested board is considered', () => {

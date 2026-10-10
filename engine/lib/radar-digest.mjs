@@ -82,7 +82,12 @@ export function selectBoard(events, board, n = 3, now = Date.now()) {
     return String(t || '').toLowerCase().replace(/[\s\p{P}\p{S}]+/gu, '');
   };
   const seenTitles = new Set();
-  for (const e of [...scored, ...unscored]) {
+  // Better one real story than three padded ones: a board shows only scored
+  // cards. Unscored rows (score 0) are a fallback for when scoring failed
+  // outright, not filler to reach three — padding a thin board with scoreless
+  // items is how a board ends up looking like nothing but weak news.
+  const pool = scored.length ? scored : unscored;
+  for (const e of pool) {
     const key = e.threadId || e.id;
     if (seenThreads.has(key)) continue;
     const tk = titleKey(e);

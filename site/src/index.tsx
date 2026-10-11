@@ -240,12 +240,15 @@ async function boardCandidates(env:Bindings,s:Snapshot|null){
     // The snapshot is the newest edition and wins on editorial content, but its
     // `fetchedAt` is this sweep's fetch time and it carries no thread_id — a
     // story the engine re-surfaced today would look brand new and outrank
-    // genuinely fresh news, and it would lose its story rail. The archive row
-    // supplies the age AND the thread; the snapshot supplies the card's text.
+    // genuinely fresh news, and it would lose its story rail. So the snapshot
+    // only OVERRIDES the text of rows already in the board's candidates; it never
+    // ADDS one. (Adding a snapshot-only row with this sweep's fetchedAt is how
+    // the homepage's tech board led with three undated CISA advisories that the
+    // archive, which ages them by first_seen, correctly kept out of the top.)
     for(const e of (s?.events||[])){
       if(!e||!e.id||e.category!==b)continue;
       const archived=m.get(e.id);
-      m.set(e.id,archived?{...e,publishedAt:archived.publishedAt,fetchedAt:archived.fetchedAt,threadId:archived.threadId}:e);
+      if(archived)m.set(e.id,{...e,publishedAt:archived.publishedAt,fetchedAt:archived.fetchedAt,threadId:archived.threadId});
     }
     lists.set(b,Array.from(m.values()));
   }));

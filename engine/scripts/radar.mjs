@@ -20,7 +20,12 @@ await atomic('runs/latest.json',sweep);await atomic('runs/radar-feeds.json',feed
 const s=sweep.sources;const now=new Date().toISOString();
 const markets=Object.values(s.YFinance?.quotes||{}).filter(q=>!q.error&&q.observedAt&&Number.isFinite(q.price)&&Number.isFinite(q.changePct)).map(q=>({symbol:q.symbol,name:q.name,price:q.price,changePct:q.changePct,at:q.observedAt,source:`https://finance.yahoo.com/quote/${encodeURIComponent(q.symbol)}/`}));
 const raw=feeds.flatMap(f=>f.items);
-function add(source,category,title,url,evidence,at=null,stableId=url) {if(!title||!url?.startsWith('https:'))return;raw.push({id:eventId(source,stableId),source,category,title:String(title).slice(0,280),url,publishedAt:at||null,fetchedAt:sweep.crucix.timestamp,stage:'announcement',deadlineAt:null,evidence:String(evidence||title).slice(0,1900),unknowns:'Applicability needs verification in the original source.'});}
+// Every published event must carry a date. A source that hands us none is dated
+// with this sweep's fetch time rather than left null: an undated row never ages
+// (the decay has nothing to measure), so it looks permanently fresh and climbs
+// boards in a way the archive, which ages it by first_seen, cannot match. Null
+// dates here once put 144 undated rows in D1 and led the tech board with them.
+function add(source,category,title,url,evidence,at=null,stableId=url) {if(!title||!url?.startsWith('https:'))return;raw.push({id:eventId(source,stableId),source,category,title:String(title).slice(0,280),url,publishedAt:at||sweep.crucix.timestamp,fetchedAt:sweep.crucix.timestamp,stage:'announcement',deadlineAt:null,evidence:String(evidence||title).slice(0,1900),unknowns:'Applicability needs verification in the original source.'});}
 for(const a of (s.AIInfra?.hardSignals||[]).slice(0,8))add(a.from,'ai',a.title,a.url,a.title,a.at);
 for(const a of (s.GDELT?.allArticles||[]).slice(0,5))add('GDELT','geopolitics',a.title,a.url,a.title);
 // Social and humanitarian feeds carry the story first-hand, so they feed the
@@ -33,7 +38,7 @@ for(const topic of ['conflict','markets','health'])for(const p of (s.Bluesky?.to
 for(const o of (s.WHO?.diseaseOutbreakNews||[]).slice(0,5))if(o.url)add('WHO','geopolitics',o.title,o.url,o.summary||`WHO Disease Outbreak News${o.donId?' ('+o.donId+')':''}: ${o.title}`,at(o.date));
 for(const r of (s.ReliefWeb?.latestReports||[]).slice(0,5))if(r.url)add('ReliefWeb','geopolitics',r.title,r.url,r.description||`ReliefWeb (UN OCHA) update: ${r.title}`,at(r.date));
 for(const a of (s.OFAC?.recent||[]).slice(0,5))if(a.url)add('OFAC','geopolitics',a.title,a.url,`OFAC recent action${a.date?' dated '+a.date:''}: ${a.title}`,at(a.date));
-for(const a of (s['CISA-KEV']?.vulnerabilities||[]).slice(0,5))add('CISA-KEV','tech',`${a.cveID}: ${a.vulnerabilityName}`,`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,`${a.vendorProject} ${a.product}. ${a.shortDescription||''}. ${a.requiredAction||''}. Federal remediation due date is not a deadline applying to every reader.`,null,a.cveID);
+for(const a of (s['CISA-KEV']?.vulnerabilities||[]).slice(0,5))add('CISA-KEV','tech',`${a.cveID}: ${a.vulnerabilityName}`,`https://www.cisa.gov/known-exploited-vulnerabilities-catalog`,`${a.vendorProject} ${a.product}. ${a.shortDescription||''}. ${a.requiredAction||''}. Federal remediation due date is not a deadline applying to every reader.`,at(a.dateAdded),a.cveID);
 const all=[...new Map(raw.map(x=>[x.id,x])).values()].map(x=>({...x,title:scrub(x.title),evidence:scrub(x.evidence)}));
 // Drop items with no usable content (unreadable/missing extraction): only real news stays.
 const withEvidence=all.filter(x=>usableEvidence(x.evidence,x.title));

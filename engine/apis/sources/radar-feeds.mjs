@@ -45,7 +45,9 @@ export function parseFeed(raw) {
 }
 function event(source,category,item) {
   return {id:eventId(source,item.sourceId||item.url),source,category,title:item.title.slice(0,280),url:item.url,
-    publishedAt:item.publishedAt||null,fetchedAt:new Date().toISOString(),stage:item.stage||'announcement',deadlineAt:item.deadlineAt||null,
+    // A date is mandatory: an undated card never ages, so it stays "fresh"
+    // forever. Sources with no date of their own get the fetch time.
+    publishedAt:item.publishedAt||new Date().toISOString(),fetchedAt:new Date().toISOString(),stage:item.stage||'announcement',deadlineAt:item.deadlineAt||null,
     evidence:(item.evidence||item.title).slice(0,1900),conditions:item.conditions||{},unknowns:item.unknowns||'Individual eligibility and applicability have not been established.'};
 }
 async function feed(source,category,url,stage='announcement',limit=12) {

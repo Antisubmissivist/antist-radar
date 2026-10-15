@@ -341,7 +341,6 @@ async function marketwatch() {
   return {scanned:r.scanned,items:r.items.filter(i=>!JUNK.test(i.url)&&!JUNK.test(i.title))};
 }
 export const FEEDS=[
-  {name:'GitHub Releases',url:'https://docs.github.com/en/rest/releases/releases',collect:releases},
   {name:'ClawFeed',url:'https://clawfeed.kevinhe.io/',collect:clawfeed},
   // X has no open API, so the only way to read where AI news actually breaks is
   // through something that already scrapes it. These are windows into X, tiered
@@ -354,7 +353,6 @@ export const FEEDS=[
   {name:'Reddit',url:'https://www.reddit.com/',collect:arcticShift},
   {name:'Techmeme',url:'https://www.techmeme.com/',collect:()=>feed('Techmeme','tech','https://www.techmeme.com/feed.xml')},
   {name:'The Verge',url:'https://www.theverge.com/rss/index.xml',collect:()=>feed('The Verge','tech','https://www.theverge.com/rss/index.xml')},
-  {name:'Ars Technica',url:'https://feeds.arstechnica.com/arstechnica/index',collect:()=>feed('Ars Technica','tech','https://feeds.arstechnica.com/arstechnica/index')},
   {name:'TechCrunch',url:'https://techcrunch.com/feed/',collect:()=>feed('TechCrunch','tech','https://techcrunch.com/feed/')},
   {name:'Engadget',url:'https://www.engadget.com/rss.xml',collect:()=>feed('Engadget','tech','https://www.engadget.com/rss.xml')},
   {name:'9to5Mac',url:'https://9to5mac.com/feed/',collect:()=>feed('9to5Mac','tech','https://9to5mac.com/feed/')},
@@ -369,9 +367,7 @@ export const FEEDS=[
   {name:'GSMArena',url:'https://www.gsmarena.com/',collect:()=>feed('GSMArena','tech','https://www.gsmarena.com/rss-news-reviews.php3')},
   {name:"Tom's Hardware",url:'https://www.tomshardware.com/',collect:()=>feed("Tom's Hardware",'tech','https://www.tomshardware.com/feeds/all')},
   {name:'Wired',url:'https://www.wired.com/',collect:()=>feed('Wired','tech','https://www.wired.com/feed/rss')},
-  {name:'Gizmodo',url:'https://gizmodo.com/',collect:()=>feed('Gizmodo','tech','https://gizmodo.com/feed')},
   {name:'GIGAZINE',url:'https://gigazine.net/',collect:()=>feed('GIGAZINE','tech','https://gigazine.net/news/rss_2.0/')},
-  {name:'e-Gov',url:'https://public-comment.e-gov.go.jp/',collect:policies},
   {name:'JASSO',url:'https://www.jasso.go.jp/ryugaku/',collect:()=>notices('JASSO','japan-life','https://www.jasso.go.jp/ryugaku/',/\/(news\/|ryugaku\/.+\/event\/|ryugaku\/.+\/admission)/)},
   {name:'Kokusen',url:'https://www.kokusen.go.jp/mimamori/mj_mglist.html',collect:()=>notices('Kokusen','japan-life','https://www.kokusen.go.jp/mimamori/mj_mglist.html',/\/mj_mailmag\/mj-shinsen\d+\.html$/)},
   // National / Tokyo Japan-life desk (2026-10-10). The old japan-life sources
@@ -381,7 +377,6 @@ export const FEEDS=[
   {name:'NHK 社会',url:'https://www3.nhk.or.jp/',collect:()=>feed('NHK 社会','japan-life','https://www3.nhk.or.jp/rss/news/cat1.xml',undefined,8)},
   {name:'Yahoo 国内',url:'https://news.yahoo.co.jp/',collect:()=>feed('Yahoo 国内','japan-life','https://news.yahoo.co.jp/rss/topics/domestic.xml',undefined,8)},
   {name:'ライブドア 国内',url:'https://news.livedoor.com/',collect:()=>feed('ライブドア 国内','japan-life','https://news.livedoor.com/topics/rss/dom.xml',undefined,8)},
-  {name:'Bank of Japan',url:'https://www.boj.or.jp/rss/whatsnew.xml',collect:()=>feed('Bank of Japan','stocks','https://www.boj.or.jp/rss/whatsnew.xml')},
   {name:'Cointelegraph',url:'https://cointelegraph.com/rss',collect:()=>feed('Cointelegraph','crypto','https://cointelegraph.com/rss')},
   {name:'Decrypt',url:'https://decrypt.co/feed',collect:()=>feed('Decrypt','crypto','https://decrypt.co/feed')},
   {name:'CoinDesk',url:'https://www.coindesk.com/arc/outboundfeeds/rss/',collect:()=>feed('CoinDesk','crypto','https://www.coindesk.com/arc/outboundfeeds/rss/')},

@@ -204,7 +204,7 @@ const RETAIN_DAYS=10;
 async function retain(env:Bindings){
   const cutoff=new Date(Date.now()-RETAIN_DAYS*86400000).toISOString();
   const cols='id,source,category,url,published_at,first_seen,last_seen,stage,deadline_at,change,title_json,summary_json,audience_json,action_json,unknowns_json,evidence,score';
-  const cond="COALESCE(NULLIF(published_at,''),first_seen)<?";
+  const cond="COALESCE(NULLIF(published_at,''),first_seen)<? AND id NOT IN (SELECT id FROM events_archive)";
   const a=await env.DB.prepare(`INSERT OR REPLACE INTO events_archive (${cols},archived_at) SELECT ${cols},? FROM events WHERE ${cond}`).bind(new Date().toISOString(),cutoff).run();
   return {archived:a.meta.changes,deleted:0,cutoff};
 }
@@ -249,6 +249,7 @@ async function boardCandidates(env:Bindings,s:Snapshot|null){
       if(!e||!e.id||e.category!==b)continue;
       const archived=m.get(e.id);
       if(archived)m.set(e.id,{...e,publishedAt:archived.publishedAt,fetchedAt:archived.fetchedAt,threadId:archived.threadId});
+      else m.set(e.id,e);
     }
     lists.set(b,Array.from(m.values()));
   }));
@@ -424,6 +425,7 @@ else if(cmd==='/stop'){await c.env.DB.prepare('UPDATE subscribers SET active=0 W
 }
 }catch{}return c.json({ok:true});});
 app.post('/api/ingest',async c=>{
+  try {
   const actual=c.req.header('Authorization')||'';const expected=`Bearer ${c.env.RADAR_INGEST_TOKEN||''}`;
   const hash=async(v:string)=>new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(v)));
   const [a,b]=await Promise.all([hash(actual),hash(expected)]);let diff=0;for(let i=0;i<a.length;i++)diff|=a[i]^b[i];
@@ -434,11 +436,13 @@ app.post('/api/ingest',async c=>{
   const current=await c.env.MONITOR.get<Snapshot>(KEY,'json');
   if(current&&Date.parse(current.generatedAt)>Date.parse(s.generatedAt))return c.json({ok:false,reason:'out of order'},409);
   const dayKey=`snapshots/${s.generatedAt.slice(0,10)}.json`;
-  for(const f of (s.forecasts||[])){await c.env.DB.prepare('INSERT OR IGNORE INTO forecasts (id,created_at,due_at,symbol,baseline,direction,probability,claim_json,rationale_json,evidence_json) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(f.id,f.createdAt,f.dueAt,f.symbol,f.baseline,f.direction,f.probability,JSON.stringify(f.claim),JSON.stringify(f.rationale),JSON.stringify(f.evidence)).run();}
-  for(const f of (s.forecasts||[])){const r=await c.env.DB.prepare('SELECT * FROM forecasts WHERE id=?').bind(f.id).first();if(r){f.createdAt=String(r.created_at);f.dueAt=String(r.due_at);f.symbol=String(r.symbol);f.baseline=Number(r.baseline);f.direction=r.direction==='above'?'above':'below';f.probability=Number(r.probability);f.claim=JSON.parse(String(r.claim_json));f.rationale=JSON.parse(String(r.rationale_json));f.evidence=JSON.parse(String(r.evidence_json));}}
+  try{
+    for(const f of (s.forecasts||[])){await c.env.DB.prepare('INSERT OR IGNORE INTO forecasts (id,created_at,due_at,symbol,baseline,direction,probability,claim_json,rationale_json,evidence_json) VALUES (?,?,?,?,?,?,?,?,?,?)').bind(f.id,f.createdAt,f.dueAt,f.symbol,f.baseline,f.direction,f.probability,JSON.stringify(f.claim),JSON.stringify(f.rationale),JSON.stringify(f.evidence)).run();}
+    for(const f of (s.forecasts||[])){const r=await c.env.DB.prepare('SELECT * FROM forecasts WHERE id=?').bind(f.id).first();if(r){f.createdAt=String(r.created_at);f.dueAt=String(r.due_at);f.symbol=String(r.symbol);f.baseline=Number(r.baseline);f.direction=r.direction==='above'?'above':'below';f.probability=Number(r.probability);f.claim=JSON.parse(String(r.claim_json));f.rationale=JSON.parse(String(r.rationale_json));f.evidence=JSON.parse(String(r.evidence_json));}}
+  }catch(e:any){console.error(JSON.stringify({event:'d1-forecasts-fail',error:e.message}));}
   await c.env.ARCHIVE.put(dayKey,JSON.stringify(s),{httpMetadata:{contentType:'application/json'}});
   await c.env.ARCHIVE.put('snapshots/latest.json',JSON.stringify(s),{httpMetadata:{contentType:'application/json'}});
-  await settle(c.env,s);
+  try { await settle(c.env,s); } catch (e:any) { console.error(JSON.stringify({event:'settle-fail',error:e.message})); }
   const nowIso=new Date().toISOString();
 
   // Assign each incoming event to a story thread. This happens here because the
@@ -462,9 +466,15 @@ app.post('/api/ingest',async c=>{
   }
 
   const evStmts=(s.events||[]).map(e=>c.env.DB.prepare('INSERT INTO events (id,source,category,url,published_at,first_seen,last_seen,stage,deadline_at,change,title_json,summary_json,audience_json,action_json,unknowns_json,evidence,score,thread_id,thread_terms) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET last_seen=excluded.last_seen,source=excluded.source,category=excluded.category,url=excluded.url,published_at=excluded.published_at,stage=excluded.stage,deadline_at=excluded.deadline_at,change=excluded.change,title_json=excluded.title_json,summary_json=excluded.summary_json,audience_json=excluded.audience_json,action_json=excluded.action_json,unknowns_json=excluded.unknowns_json,evidence=excluded.evidence,score=excluded.score').bind(e.id,e.source,e.category,e.url,e.publishedAt||null,nowIso,nowIso,e.stage||null,e.deadlineAt||null,e.change||null,JSON.stringify(e.title),JSON.stringify(e.summary),JSON.stringify(e.audience),JSON.stringify(e.action),JSON.stringify(e.unknowns),e.evidence,e.score||0,threadOf.get(e.id)?.id||null,threadOf.get(e.id)?.terms||null));
-  if(evStmts.length)await c.env.DB.batch(evStmts);
-  await c.env.DB.prepare('INSERT OR IGNORE INTO sweeps (id,fetched_at,published_at,source_count,healthy_count,event_count,archive_key) VALUES (?,?,?,?,?,?,?)').bind(s.id,s.generatedAt,new Date().toISOString(),s.sources.length,s.sources.filter(x=>['ok','quiet'].includes(x.status)).length,s.events.length,dayKey).run();
+  try{
+    if(evStmts.length)await c.env.DB.batch(evStmts);
+    await c.env.DB.prepare('INSERT OR IGNORE INTO sweeps (id,fetched_at,published_at,source_count,healthy_count,event_count,archive_key) VALUES (?,?,?,?,?,?,?)').bind(s.id,s.generatedAt,new Date().toISOString(),s.sources.length,s.sources.filter(x=>['ok','quiet'].includes(x.status)).length,s.events.length,dayKey).run();
+  }catch(e:any){console.error(JSON.stringify({event:'d1-events-batch-fail',error:e.message}));}
   try{await c.env.MONITOR.put('radar:version',s.generatedAt);}catch{}return c.json({ok:true,id:s.id,archived:true});
+  } catch(err:any) {
+    console.error('INGEST_CRASH:', err);
+    return c.json({ ok: false, crash: String(err), message: err?.message, stack: err?.stack }, 500);
+  }
 });
 app.get('/subscribe',c=>c.redirect('/zh#subscribe',302));
 app.get('/ledger',c=>c.redirect('/en/ledger',302));
